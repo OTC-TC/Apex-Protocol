@@ -1,40 +1,100 @@
-const API_KEY = "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"; // NEVER expose in production
-const MODEL = "stepfun/step-3.5-flash:free"; // change model if needed
+// ⚠️ DO NOT expose API keys in frontend in production
+const API_KEY = "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";
+const MODEL = "stepfun/step-3.5-flash:free";
 
 let chatHistory = [];
+let possession = 0;
 
-document.getElementById("userInput")
-  .addEventListener("keypress", function(e) {
-    if (e.key === "Enter") {
-      askAI();
-    }
-  });
+const chatBox = document.getElementById("chatBox");
+const inputField = document.getElementById("userInput");
 
+/* =============================
+   ENTER + SHIFT SUPPORT
+============================= */
+inputField.addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    askAI();
+  }
+});
+
+/* =============================
+   ADD MESSAGE
+============================= */
 function addMessage(text, className) {
-  const chatBox = document.getElementById("chatBox");
   const messageDiv = document.createElement("div");
   messageDiv.classList.add("message", className);
-  messageDiv.innerText = text;
+
+  const time = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  messageDiv.innerHTML = `
+    <div>${text}</div>
+    <div class="time">${time}</div>
+  `;
+
   chatBox.appendChild(messageDiv);
-  chatBox.scrollTop = chatBox.scrollHeight;
+
+  smoothScroll();
+  saveChat();
 }
 
-async function askAI() {
-  const inputField = document.getElementById("userInput");
-  const userMessage = inputField.value.trim();
+/* =============================
+   SMOOTH SCROLL
+============================= */
+function smoothScroll() {
+  chatBox.scrollTo({
+    top: chatBox.scrollHeight,
+    behavior: "smooth"
+  });
+}
 
+/* =============================
+   POSSESSION METER
+============================= */
+function updatePossession() {
+  possession = Math.min(100, possession + 4);
+  document.querySelector(".possession-fill").style.width =
+    possession + "%";
+}
+
+/* =============================
+   TYPING INDICATOR
+============================= */
+function showTyping() {
+  const typingDiv = document.createElement("div");
+  typingDiv.classList.add("message", "bot");
+  typingDiv.id = "typing";
+  typingDiv.innerHTML = `<div>Building play...</div>`;
+  chatBox.appendChild(typingDiv);
+  smoothScroll();
+}
+
+function removeTyping() {
+  const typing = document.getElementById("typing");
+  if (typing) typing.remove();
+}
+
+/* =============================
+   ASK AI
+============================= */
+async function askAI() {
+  const userMessage = inputField.value.trim();
   if (!userMessage) return;
 
   addMessage(userMessage, "user");
   inputField.value = "";
 
-  addMessage("Thinking...", "ai");
+  updatePossession();
 
-  // OpenRouter uses OpenAI-style format
   chatHistory.push({
     role: "user",
     content: userMessage
   });
+
+  showTyping();
 
   try {
     const response = await fetch(
@@ -42,10 +102,8 @@ async function askAI() {
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": window.location.href,
-          "X-Title": "Apex Protocol"
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: MODEL,
@@ -56,10 +114,16 @@ async function askAI() {
 
     const data = await response.json();
 
+    removeTyping();
+
+    if (!data.choices) {
+      addMessage("Tactical error. Try again.", "bot");
+      return;
+    }
+
     const aiText = data.choices[0].message.content;
 
-    document.querySelector(".ai:last-child").remove();
-    addMessage(aiText, "ai");
+    addMessage(aiText, "bot");
 
     chatHistory.push({
       role: "assistant",
@@ -67,11 +131,41 @@ async function askAI() {
     });
 
   } catch (error) {
-    document.querySelector(".ai:last-child").remove();
-    addMessage("Error occurred. Try again.", "ai");
+    removeTyping();
+    addMessage("Connection lost. Regain control.", "bot");
     console.error(error);
   }
 }
+
+/* =============================
+   LOCAL STORAGE
+============================= */
+function saveChat() {
+  localStorage.setItem("barcaChat", chatBox.innerHTML);
+}
+
+function loadChat() {
+  const saved = localStorage.getItem("barcaChat");
+  if (saved) chatBox.innerHTML = saved;
+}
+
+window.onload = loadChat;
+
+/* =============================
+   CLEAR CHAT
+============================= */
+function clearChat() {
+  chatBox.innerHTML = "";
+  chatHistory = [];
+  localStorage.removeItem("barcaChat");
+}
+
+/* =============================
+   RELOAD
+============================= */
 function reloadChat() {
   location.reload();
 }
+
+
+
