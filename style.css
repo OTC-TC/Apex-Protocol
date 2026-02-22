@@ -200,6 +200,7 @@ body {
 @media (max-width: 480px) {
 
 html, body {
+  padding: 0%;
   height: 100%;
   overflow: hidden;              /* 🔥 disables full page scroll */
   overscroll-behavior: none;     /* prevents bounce */
