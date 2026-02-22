@@ -135,6 +135,24 @@ button:active {
   transform: scale(0.97);
 }
 
+
+.reload-btn {
+  background: linear-gradient(90deg, #d4af37, #ff0000);
+  color: white;
+  border: none;
+  font-size: 20px;
+  padding: 8px 20px;
+  margin-right: 5px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.reload-btn:hover {
+  transform: scale(1.1);
+}
+
 /* Typing animation */
 .typing {
   display: flex;
