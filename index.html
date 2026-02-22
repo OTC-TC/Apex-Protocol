@@ -8,13 +8,19 @@
 <body>
 
 <div class="chat-container">
-  <div class="chat-header">Apex Protocol</div>
-
+  <div class="chat-header">
+  Apex Protocol
+  <div class="possession-bar">
+    <div class="possession-fill" style="width:0%"></div>
+  </div>
+</div>
+ 
   <div id="chatBox" class="chat-box"></div>
 
   <div class="input-area">
     <input type="text" id="userInput" placeholder="Type your message..." />
     <button onclick="askAI()">Send</button>
+    <button onclick="clearChat()">Reset</button>
       <button class="reload-btn" onclick="reloadChat()">↻</button>
   </div>
 </div>
