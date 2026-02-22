@@ -1,4 +1,4 @@
-const API_KEY = "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"; // NEVER expose in production
+const API_KEY = "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"; // NEVER expose in production
 const MODEL = "openai/gpt-4o-mini"; // change model if needed
 
 let chatHistory = [];
