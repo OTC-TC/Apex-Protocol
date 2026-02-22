@@ -72,4 +72,6 @@ async function askAI() {
     console.error(error);
   }
 }
-
+function reloadChat() {
+  location.reload();
+}
