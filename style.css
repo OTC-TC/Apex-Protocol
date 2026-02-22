@@ -55,6 +55,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+ 
 }
 
 /* ===== MESSAGE BASE ===== */
@@ -198,10 +199,18 @@ body {
 /* Small phones */
 @media (max-width: 480px) {
 
-  body {
-    align-items: flex-start;
-  }
+ html, body {
+  height: 100%;
+  overflow: hidden;   /* 🔥 prevents full page scroll */
+  touch-action: manipulation;
+}
 
+.chat-box {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;   /* Only this area scrolls */
+  -webkit-overflow-scrolling: touch; /* Smooth mobile scroll */
+}
   .chat-container {
     height: 95vh;
     border-radius: 12px;
