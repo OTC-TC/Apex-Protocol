@@ -1,4 +1,6 @@
-const API_KEY = "AIzaSyC9IMwq-OGvqJJ81L3b-Y0n3rhyxD6fx0E"; // NEVER expose in production
+const API_KEY = "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"; // NEVER expose in production
+const MODEL = "openai/gpt-4o-mini"; // change model if needed
+
 let chatHistory = [];
 
 document.getElementById("userInput")
@@ -28,38 +30,45 @@ async function askAI() {
 
   addMessage("Thinking...", "ai");
 
+  // OpenRouter uses OpenAI-style format
   chatHistory.push({
     role: "user",
-    parts: [{ text: userMessage }]
+    content: userMessage
   });
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Authorization": `Bearer ${API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": window.location.href,
+          "X-Title": "Apex Protocol"
         },
         body: JSON.stringify({
-          contents: chatHistory
+          model: MODEL,
+          messages: chatHistory
         })
       }
     );
 
     const data = await response.json();
-    const aiText = data.candidates[0].content.parts[0].text;
+
+    const aiText = data.choices[0].message.content;
 
     document.querySelector(".ai:last-child").remove();
     addMessage(aiText, "ai");
 
     chatHistory.push({
-      role: "model",
-      parts: [{ text: aiText }]
+      role: "assistant",
+      content: aiText
     });
 
   } catch (error) {
     document.querySelector(".ai:last-child").remove();
     addMessage("Error occurred. Try again.", "ai");
+    console.error(error);
   }
 }
