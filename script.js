@@ -1,5 +1,5 @@
 const API_KEY = "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"; // NEVER expose in production
-const MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"; // change model if needed
+const MODEL = "stepfun/step-3.5-flash:free"; // change model if needed
 
 let chatHistory = [];
 
