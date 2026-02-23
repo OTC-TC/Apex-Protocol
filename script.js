@@ -1,15 +1,23 @@
-// ⚠️ DO NOT expose API keys in frontend in production
-const API_KEY = "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";
-const MODEL = "stepfun/step-3.5-flash:free";
+// ⚠️ NEVER expose API keys in frontend in production
+const API_KEY = "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";
+const MODEL = "arcee-ai/trinity-large-preview:free";
 
-let chatHistory = [];
+let chatHistory = [
+  {
+    role: "system",
+    content:
+      "You are Apex Mind. You are intelligent, sharp, confident and tactical. Keep responses clear and powerful."
+  }
+];
+
 let possession = 0;
+let isLoading = false;
 
 const chatBox = document.getElementById("chatBox");
 const inputField = document.getElementById("userInput");
 
 /* =============================
-   ENTER + SHIFT SUPPORT
+   ENTER SUPPORT
 ============================= */
 inputField.addEventListener("keydown", function (e) {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -19,45 +27,87 @@ inputField.addEventListener("keydown", function (e) {
 });
 
 /* =============================
-   ADD MESSAGE
+   ADD MESSAGE (CLICK TO COPY)
 ============================= */
-function addMessage(text, className) {
+function addMessage(text, role) {
   const messageDiv = document.createElement("div");
-  messageDiv.classList.add("message", className);
+  messageDiv.classList.add("message", role);
 
-  const time = new Date().toLocaleTimeString([], {
+  const textDiv = document.createElement("div");
+  textDiv.classList.add("msg-text");
+
+  if (role === "bot") {
+    textDiv.innerHTML = marked.parse(text);
+  } else {
+    textDiv.textContent = text;
+  }
+
+  const time = document.createElement("div");
+  time.classList.add("time");
+  time.innerText = new Date().toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit"
   });
 
-  messageDiv.innerHTML = `
-    <div>${text}</div>
-    <div class="time">${time}</div>
-  `;
+  messageDiv.appendChild(textDiv);
+  messageDiv.appendChild(time);
+
+  // ✅ CLICK ANY MESSAGE TO COPY
+  messageDiv.style.cursor = "pointer";
+  messageDiv.addEventListener("click", () => {
+    copyText(text);
+  });
 
   chatBox.appendChild(messageDiv);
-
   smoothScroll();
-  saveChat();
 }
 
 /* =============================
-   SMOOTH SCROLL
+   COPY SYSTEM
 ============================= */
-function smoothScroll() {
-  chatBox.scrollTo({
-    top: chatBox.scrollHeight,
-    behavior: "smooth"
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showCopyFeedback();
   });
 }
 
+function showCopyFeedback() {
+  const existing = document.getElementById("copy-popup");
+  if (existing) existing.remove();
+
+  const popup = document.createElement("div");
+  popup.id = "copy-popup";
+  popup.innerText = "Copied ✓";
+
+  popup.style.position = "fixed";
+  popup.style.bottom = "25px";
+  popup.style.right = "25px";
+  popup.style.background = "#111";
+  popup.style.color = "#fff";
+  popup.style.padding = "8px 14px";
+  popup.style.borderRadius = "8px";
+  popup.style.fontSize = "13px";
+  popup.style.zIndex = "9999";
+
+  document.body.appendChild(popup);
+
+  setTimeout(() => popup.remove(), 1000);
+}
+
 /* =============================
-   POSSESSION METER
+   SCROLL
+============================= */
+function smoothScroll() {
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+/* =============================
+   POSSESSION BAR
 ============================= */
 function updatePossession() {
-  possession = Math.min(100, possession + 4);
-  document.querySelector(".possession-fill").style.width =
-    possession + "%";
+  possession = Math.min(100, possession + 3);
+  const fill = document.querySelector(".possession-fill");
+  if (fill) fill.style.width = possession + "%";
 }
 
 /* =============================
@@ -67,7 +117,12 @@ function showTyping() {
   const typingDiv = document.createElement("div");
   typingDiv.classList.add("message", "bot");
   typingDiv.id = "typing";
-  typingDiv.innerHTML = `<div>Building play...</div>`;
+
+  const textDiv = document.createElement("div");
+  textDiv.classList.add("msg-text");
+  textDiv.innerText = "Apex Mind is thinking...";
+
+  typingDiv.appendChild(textDiv);
   chatBox.appendChild(typingDiv);
   smoothScroll();
 }
@@ -81,19 +136,24 @@ function removeTyping() {
    ASK AI
 ============================= */
 async function askAI() {
+  if (isLoading) return;
+
   const userMessage = inputField.value.trim();
   if (!userMessage) return;
 
-  addMessage(userMessage, "user");
-  inputField.value = "";
+  isLoading = true;
 
-  updatePossession();
+  addMessage(userMessage, "user");
 
   chatHistory.push({
     role: "user",
     content: userMessage
   });
 
+  inputField.value = "";
+  inputField.focus();
+
+  updatePossession();
   showTyping();
 
   try {
@@ -107,67 +167,147 @@ async function askAI() {
         },
         body: JSON.stringify({
           model: MODEL,
-          messages: chatHistory
+          messages: chatHistory,
+          temperature: 0.7
         })
       }
     );
 
-    const data = await response.json();
+    if (!response.ok) throw new Error("API Error");
 
+    const data = await response.json();
     removeTyping();
 
-    if (!data.choices) {
-      addMessage("Tactical error. Try again.", "bot");
-      return;
-    }
+    const aiText =
+      data?.choices?.[0]?.message?.content ||
+      "Unexpected response.";
 
-    const aiText = data.choices[0].message.content;
-
-    addMessage(aiText, "bot");
+    typeEffect(aiText);
 
     chatHistory.push({
       role: "assistant",
       content: aiText
     });
 
+    saveChat();
   } catch (error) {
     removeTyping();
-    addMessage("Connection lost. Regain control.", "bot");
+    addMessage("⚠️ Connection issue. Try again.", "bot");
     console.error(error);
   }
+
+  isLoading = false;
 }
 
 /* =============================
-   LOCAL STORAGE
+   TYPING EFFECT
+============================= */
+function typeEffect(text) {
+  const messageDiv = document.createElement("div");
+  messageDiv.classList.add("message", "bot");
+
+  const textDiv = document.createElement("div");
+  textDiv.classList.add("msg-text");
+
+  messageDiv.appendChild(textDiv);
+  chatBox.appendChild(messageDiv);
+  smoothScroll();
+
+  let index = 0;
+
+  const interval = setInterval(() => {
+    textDiv.textContent += text[index];
+    index++;
+    smoothScroll();
+
+    if (index >= text.length) {
+      clearInterval(interval);
+
+      textDiv.innerHTML = marked.parse(text);
+
+      const time = document.createElement("div");
+      time.classList.add("time");
+      time.innerText = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      messageDiv.appendChild(time);
+
+      // ✅ CLICK TO COPY
+      messageDiv.style.cursor = "pointer";
+      messageDiv.addEventListener("click", () => {
+        copyText(text);
+      });
+
+      saveChat();
+    }
+  }, 15);
+}
+
+/* =============================
+   SAVE & LOAD CHAT
 ============================= */
 function saveChat() {
-  localStorage.setItem("barcaChat", chatBox.innerHTML);
+  localStorage.setItem("apexMindChat", JSON.stringify(chatHistory));
 }
 
 function loadChat() {
-  const saved = localStorage.getItem("barcaChat");
-  if (saved) chatBox.innerHTML = saved;
+  const saved = localStorage.getItem("apexMindChat");
+  if (!saved) return;
+
+  chatHistory = JSON.parse(saved);
+  chatBox.innerHTML = "";
+
+  chatHistory.forEach(msg => {
+    if (msg.role !== "system") {
+      addMessage(
+        msg.content,
+        msg.role === "user" ? "user" : "bot"
+      );
+    }
+  });
 }
 
-window.onload = loadChat;
+window.onload = function () {
+  loadChat();
+  inputField.focus();
+};
 
 /* =============================
    CLEAR CHAT
 ============================= */
 function clearChat() {
   chatBox.innerHTML = "";
-  chatHistory = [];
-  localStorage.removeItem("barcaChat");
+  chatHistory = [
+    {
+      role: "system",
+      content:
+        "You are Apex Mind. You are intelligent, sharp, confident and tactical."
+    }
+  ];
+  localStorage.removeItem("apexMindChat");
+
+  possession = 0;
+  const fill = document.querySelector(".possession-fill");
+  if (fill) fill.style.width = "0%";
 }
 
 /* =============================
-   RELOAD
+   EXPORT CHAT
 ============================= */
-function reloadChat() {
-  location.reload();
+function exportChat() {
+  let text = "";
+
+  chatHistory.forEach(msg => {
+    if (msg.role !== "system") {
+      text += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+    }
+  });
+
+  const blob = new Blob([text], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "apex-mind-chat.txt";
+  a.click();
 }
-
-
-
-
-
