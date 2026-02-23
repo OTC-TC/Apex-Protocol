@@ -1,5 +1,5 @@
 // ⚠️ DO NOT expose API keys in frontend in production
-const API_KEY = "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";
+const API_KEY = "k-or-v1-398b8dab5c6e4090fef83ce9e12f774040706e2afcb18c921475c5cfa6c594a6";
 const MODEL = "stepfun/step-3.5-flash:free";
 
 let chatHistory = [];
@@ -166,6 +166,7 @@ function clearChat() {
 function reloadChat() {
   location.reload();
 }
+
 
 
 
