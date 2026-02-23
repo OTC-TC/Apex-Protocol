@@ -2,14 +2,15 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apex Protocol Chatbot</title>
+  <title>Apex Mind Chatbot</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 
 <div class="chat-container">
   <div class="chat-header">
-  Apex Protocol
+  Apex Mind
   <div class="possession-bar">
     <div class="possession-fill" style="width:0%"></div>
   </div>
@@ -22,6 +23,7 @@
     <button onclick="askAI()">Send</button>
     <button onclick="clearChat()">Reset</button>
       <button class="reload-btn" onclick="reloadChat()">↻</button>
+      <button onclick="exportChat()">Export</button>
   </div>
 </div>
 
