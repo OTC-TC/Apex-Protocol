@@ -1,33 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apex Mind Chatbot</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Mind</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="chat-container">
-  <div class="chat-header">
-  Apex Mind
-  <div class="possession-bar">
-    <div class="possession-fill" style="width:0%"></div>
-  </div>
-</div>
- 
-  <div id="chatBox" class="chat-box"></div>
+<div id="copy-toast">COPIED ✓</div>
 
-  <div class="input-area">
-    <input type="text" id="userInput" placeholder="Type your message..." />
-    <button onclick="askAI()">Send</button>
-    <button onclick="clearChat()">Reset</button>
-      <button class="reload-btn" onclick="reloadChat()">↻</button>
-      <button onclick="exportChat()">Export</button>
+<!-- Sidebar overlay -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<div class="app">
+
+  <!-- ── HISTORY SIDEBAR ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">History</span>
+      <button class="sidebar-close" onclick="closeSidebar()">✕</button>
+    </div>
+    <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
+    <div class="history-list" id="historyList"></div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+    <header class="chat-header">
+      <button class="history-toggle" onclick="toggleSidebar()" title="History">☰</button>
+
+      <div class="header-center">
+        <div class="header-title">Apex Mind</div>
+        <div class="possession-bar"><div class="possession-fill" id="possessionFill"></div></div>
+        <div class="header-subtitle" id="chatLabel">new session</div>
+      </div>
+
+      <div class="header-actions">
+        <button class="hdr-btn" onclick="exportChat()" title="Export">↓ <span>Export</span></button>
+        <button class="hdr-btn danger" onclick="clearCurrentChat()" title="Clear">✕ <span>Clear</span></button>
+      </div>
+    </header>
+
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="input-area">
+      <input type="text" id="userInput" placeholder="Ask Apex Mind anything…" autocomplete="off" />
+      <button class="send-btn" id="sendBtn" onclick="askAI()">Send</button>
+    </div>
   </div>
+
 </div>
 
 <script src="script.js"></script>
 </body>
-
 </html>
