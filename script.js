@@ -21,10 +21,94 @@ Always use markdown formatting.`;
 
 // ─── STORAGE ────────────────────────────
 const SK_SESSIONS="apexStudy_sessions",SK_ACTIVE="apexStudy_activeId",SK_MSG="apexStudy_msgs_";
+const SK_TRACKER="apexStudy_tracker";
 let activeSessionId=null,chatHistory=[],studyProgress=0,isLoading=false;
 let pillState={qtype:"mixed",qnum:3,mnum:5,mtype:"mcq",mtime:10,mdiff:"medium"};
 let mockQuestions=[],mockAnswers={},mockCorrectAnswers={},mockExplanations={};
 let mockTimerInt=null,mockSecsLeft=0;
+
+// ─── STUDY TRACKER STATE ─────────────────
+let trackerData = null;
+let studyTimerInt = null;
+let studyTimerSecs = 0;
+let studyTimerRunning = false;
+let activeSubjectIndex = null;
+
+function getTrackerData() {
+  try { return JSON.parse(localStorage.getItem(SK_TRACKER)) || createDefaultTracker(); }
+  catch { return createDefaultTracker(); }
+}
+function saveTrackerData(d) { localStorage.setItem(SK_TRACKER, JSON.stringify(d)); }
+function createDefaultTracker() {
+  return {
+    subjects: [],
+    goals: [],
+    sessions: [], // { date, subjectId, mins, notes }
+    quizzesTaken: 0,
+    mockTestsTaken: 0,
+    totalMsgs: 0,
+    streakDays: [],
+    createdAt: Date.now()
+  };
+}
+function ensureToday() {
+  const d = getTrackerData();
+  const today = todayStr();
+  if (!d.streakDays.includes(today)) {
+    d.streakDays.push(today);
+    saveTrackerData(d);
+  }
+}
+function todayStr() {
+  return new Date().toISOString().slice(0,10);
+}
+function getStreak() {
+  const d = getTrackerData();
+  if (!d.streakDays.length) return 0;
+  const days = [...new Set(d.streakDays)].sort();
+  let streak = 0;
+  const today = new Date(); today.setHours(0,0,0,0);
+  for (let i = days.length - 1; i >= 0; i--) {
+    const day = new Date(days[i]); day.setHours(0,0,0,0);
+    const diff = Math.round((today - day) / 86400000);
+    if (diff === streak) streak++;
+    else break;
+  }
+  return streak;
+}
+function getTodayMins() {
+  const d = getTrackerData();
+  const today = todayStr();
+  return d.sessions.filter(s => s.date === today).reduce((a,s) => a + (s.mins||0), 0);
+}
+function getWeekMins() {
+  const d = getTrackerData();
+  const now = new Date();
+  const weekAgo = new Date(now - 7*86400000).toISOString().slice(0,10);
+  return d.sessions.filter(s => s.date >= weekAgo).reduce((a,s) => a + (s.mins||0), 0);
+}
+function logStudySession(subjectId, mins, notes) {
+  const d = getTrackerData();
+  d.sessions.push({ date: todayStr(), subjectId, mins, notes: notes||"" });
+  if (subjectId !== null && subjectId !== undefined) {
+    const sub = d.subjects.find(s => s.id === subjectId);
+    if (sub) sub.totalMins = (sub.totalMins||0) + mins;
+  }
+  saveTrackerData(d);
+  ensureToday();
+}
+function trackQuiz() {
+  const d = getTrackerData(); d.quizzesTaken = (d.quizzesTaken||0)+1;
+  saveTrackerData(d); ensureToday();
+}
+function trackMock() {
+  const d = getTrackerData(); d.mockTestsTaken = (d.mockTestsTaken||0)+1;
+  saveTrackerData(d); ensureToday();
+}
+function trackMsg() {
+  const d = getTrackerData(); d.totalMsgs = (d.totalMsgs||0)+1;
+  saveTrackerData(d); ensureToday();
+}
 
 // ─── PILLS ──────────────────────────────
 function setPill(group,val){
@@ -74,6 +158,9 @@ function loadSession(id){
 
 // ─── INIT ───────────────────────────────
 window.onload=function(){
+  trackerData = getTrackerData();
+  ensureToday();
+
   const savedId=getActiveId(),sessions=getSessions();
   if(savedId&&sessions.find(s=>s.id===savedId))loadSession(savedId);
   else if(sessions.length)loadSession(sessions[0].id);
@@ -84,7 +171,7 @@ window.onload=function(){
   });
   document.getElementById("quizTopic").addEventListener("keydown",e=>{if(e.key==="Enter")startQuiz();});
   document.getElementById("mockTopic").addEventListener("keydown",e=>{if(e.key==="Enter")startMockTest();});
-  ["quizModal","mockModal"].forEach(id=>{
+  ["quizModal","mockModal","trackerModal"].forEach(id=>{
     document.getElementById(id).addEventListener("click",function(e){if(e.target===this)closeModal(id);});
   });
   document.getElementById("userInput").focus();
@@ -231,7 +318,7 @@ async function askAI(){
     const label=userMessage.slice(0,42)+(userMessage.length>42?"…":"");
     updateLabel(activeSessionId,label);document.getElementById("chatLabel").textContent=label.toLowerCase();
   }
-  updateProgress();showTyping();
+  updateProgress();showTyping();trackMsg();
   try{
     const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
       method:"POST",headers:{Authorization:`Bearer ${API_KEY}`,"Content-Type":"application/json"},
@@ -262,7 +349,7 @@ function startQuiz(){
   const tl={mixed:"mixed (MCQ and short answer)",mcq:"multiple choice",short:"short answer",truefalse:"true/false"}[pillState.qtype];
   const prompt=`Please generate a ${pillState.qnum}-question ${tl} quiz on: "${topic}". Number each question clearly (Q1, Q2…). For MCQ provide 4 options labeled A–D. Don't give the answers yet — wait for my responses.`;
   closeModal("quizModal");document.getElementById("quizTopic").value="";
-  document.getElementById("userInput").value=prompt;askAI();
+  document.getElementById("userInput").value=prompt;trackQuiz();askAI();
 }
 
 // ═══════════════════════════════════════
@@ -275,7 +362,6 @@ async function startMockTest(){
   const{mnum,mtype,mtime,mdiff}=pillState;
   const typeDesc=mtype==="mcq"?"MCQ only (4 options labeled A, B, C, D)":"a mix of MCQ (4 options labeled A, B, C, D) and short answer questions";
 
-  // Show loading
   document.getElementById("mockScreen").classList.add("active");
   document.getElementById("mockTestTitle").textContent=`📋 ${topic}`;
   document.getElementById("mockTimer").textContent=formatTime(mtime*60);
@@ -289,9 +375,7 @@ async function startMockTest(){
 
   const prompt=`Generate exactly ${mnum} questions for a ${mdiff}-difficulty mock test on: "${topic}".
 Question type: ${typeDesc}.
-
 YOU MUST respond with ONLY a valid JSON array. No text before or after. No markdown. No explanation.
-
 Use this exact format:
 [
   {
@@ -311,7 +395,6 @@ Use this exact format:
     "explanation": "Brief explanation."
   }
 ]
-
 STRICT RULES:
 - MCQ: type="mcq", exactly 4 options, answer must be the letter "A","B","C", or "D"
 - Short answer: type="short", options=[], answer is a concise expected answer string
@@ -331,7 +414,6 @@ STRICT RULES:
     });
     const data=await res.json();
     let raw=data?.choices?.[0]?.message?.content||"";
-    // Robustly extract JSON array
     raw=raw.replace(/```json|```/g,"").trim();
     const si=raw.indexOf("["),ei=raw.lastIndexOf("]");
     if(si!==-1&&ei!==-1)raw=raw.slice(si,ei+1);
@@ -343,7 +425,6 @@ STRICT RULES:
     console.error(err);return;
   }
 
-  // Cache correct answers & explanations
   mockAnswers={};mockCorrectAnswers={};mockExplanations={};
   mockQuestions.forEach(q=>{
     mockCorrectAnswers[q.num]=q.answer;
@@ -351,8 +432,8 @@ STRICT RULES:
   });
 
   renderMockBody();
+  trackMock();
 
-  // Start countdown timer
   mockSecsLeft=mtime*60;updateMockTimer();clearInterval(mockTimerInt);
   mockTimerInt=setInterval(()=>{
     mockSecsLeft--;updateMockTimer();
@@ -431,6 +512,8 @@ function confirmSubmit(){
 function submitMockTest(){
   clearInterval(mockTimerInt);
   document.getElementById("mockScreen").classList.remove("active");
+  const timeTaken=pillState.mtime*60-mockSecsLeft;
+  logStudySession(null, Math.round(timeTaken/60)||1, "Mock test");
 
   const mcqQs=mockQuestions.filter(q=>q.type==="mcq");
   const shortQs=mockQuestions.filter(q=>q.type==="short");
@@ -444,7 +527,6 @@ function submitMockTest(){
   });
   shortQs.forEach(q=>{if(!mockAnswers[q.num])skipped++;});
 
-  const timeTaken=pillState.mtime*60-mockSecsLeft;
   const mcqTotal=mcqQs.length;
   const pct=mcqTotal>0?Math.round((correct/mcqTotal)*100):null;
   const circleClass=pct===null?"ok":pct>=70?"great":pct>=40?"ok":"poor";
@@ -460,28 +542,22 @@ function submitMockTest(){
       ${shortQs.length>0?`<div class="stat-pill review">📝 ${shortQs.length} short answer${shortQs.length>1?"s":""} to review</div>`:""}
     </div>`;
 
-  // Build per-question result cards
   document.getElementById("resultsBody").innerHTML=mockQuestions.map((q,idx)=>{
     const letters=["A","B","C","D"];
     const userAns=mockAnswers[q.num];
     let statusClass,status,userBadgeClass;
-
     if(q.type==="mcq"){
       if(!userAns){status="—";statusClass="s";userBadgeClass="skipped";}
       else if(userAns.toUpperCase()===(mockCorrectAnswers[q.num]||"").toUpperCase()){status="✓";statusClass="c";userBadgeClass="correct";}
       else{status="✗";statusClass="w";userBadgeClass="wrong";}
-    }else{
-      status="📝";statusClass="r";userBadgeClass="review";
-    }
+    }else{status="📝";statusClass="r";userBadgeClass="review";}
 
-    // Build display text for MCQ answers (letter + option text)
     function mcqText(letter){
       if(!letter)return"Not answered";
       const li=letters.indexOf(letter.toUpperCase());
       const optText=li>=0&&q.options?q.options[li]:"";
       return letter.toUpperCase()+(optText?": "+optText:"");
     }
-
     const userDisplay=q.type==="mcq"?mcqText(userAns):(userAns||"Not answered");
     const correctDisplay=q.type==="mcq"?mcqText(mockCorrectAnswers[q.num]):mockCorrectAnswers[q.num]||"";
 
@@ -500,18 +576,9 @@ function submitMockTest(){
             <div class="dl">Your Answer</div>
             <span class="ans-badge ${userBadgeClass}">${escapeHtml(userDisplay)}</span>
           </div>
-          ${q.type==="mcq"?`<div class="detail-block">
-            <div class="dl">Correct Answer</div>
-            <span class="ans-badge correct-ans">${escapeHtml(correctDisplay)}</span>
-          </div>`:""}
-          ${q.type==="short"?`<div class="detail-block">
-            <div class="dl">Expected Answer</div>
-            <span class="ans-badge correct-ans">${escapeHtml(correctDisplay)}</span>
-          </div>`:""}
-          ${mockExplanations[q.num]?`<div class="detail-block">
-            <div class="dl">Explanation</div>
-            <div class="explain-text">${escapeHtml(mockExplanations[q.num])}</div>
-          </div>`:""}
+          ${q.type==="mcq"?`<div class="detail-block"><div class="dl">Correct Answer</div><span class="ans-badge correct-ans">${escapeHtml(correctDisplay)}</span></div>`:""}
+          ${q.type==="short"?`<div class="detail-block"><div class="dl">Expected Answer</div><span class="ans-badge correct-ans">${escapeHtml(correctDisplay)}</span></div>`:""}
+          ${mockExplanations[q.num]?`<div class="detail-block"><div class="dl">Explanation</div><div class="explain-text">${escapeHtml(mockExplanations[q.num])}</div></div>`:""}
         </div>
       </div>
     </div>`;
@@ -520,12 +587,312 @@ function submitMockTest(){
   document.getElementById("resultsScreen").classList.add("active");
 }
 
-function toggleCard(num){
-  const c=document.getElementById("rcard-"+num);if(c)c.classList.toggle("expanded");
-}
+function toggleCard(num){const c=document.getElementById("rcard-"+num);if(c)c.classList.toggle("expanded");}
 function closeResults(){
   document.getElementById("resultsScreen").classList.remove("active");
   mockQuestions=[];mockAnswers={};
+}
+
+// ════════════════════════════════════════
+//  STUDY TRACKER
+// ════════════════════════════════════════
+
+function openTracker() {
+  closeModal("quizModal"); closeModal("mockModal");
+  renderTrackerOverview();
+  openModal("trackerModal");
+}
+
+let trackerTab = "overview";
+function switchTrackerTab(tab) {
+  trackerTab = tab;
+  document.querySelectorAll(".tracker-tab").forEach(t => t.classList.remove("active"));
+  const el = document.getElementById("ttab-"+tab);
+  if(el) el.classList.add("active");
+  document.querySelectorAll(".tracker-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById("tpanel-"+tab);
+  if(panel) panel.style.display = "block";
+
+  if(tab==="overview") renderTrackerOverview();
+  if(tab==="subjects") renderSubjectsPanel();
+  if(tab==="goals") renderGoalsPanel();
+  if(tab==="log") renderLogPanel();
+}
+
+function renderTrackerOverview() {
+  const d = getTrackerData();
+  const streak = getStreak();
+  const todayMins = getTodayMins();
+  const weekMins = getWeekMins();
+  const totalSessions = d.sessions.length;
+  const allMins = d.sessions.reduce((a,s)=>a+(s.mins||0),0);
+
+  // Weekly chart data (last 7 days)
+  const days = [];
+  for(let i=6;i>=0;i--) {
+    const dt = new Date(); dt.setDate(dt.getDate()-i);
+    const str = dt.toISOString().slice(0,10);
+    const dayMins = d.sessions.filter(s=>s.date===str).reduce((a,s)=>a+(s.mins||0),0);
+    days.push({ label: dt.toLocaleDateString(undefined,{weekday:"short"}), mins: dayMins, date: str });
+  }
+  const maxMins = Math.max(...days.map(x=>x.mins), 1);
+  const todayFmt = todayStr();
+
+  const chartBars = days.map(day => {
+    const h = Math.max(4, Math.round((day.mins/maxMins)*80));
+    const isToday = day.date === todayFmt;
+    return `<div class="chart-col">
+      <div class="chart-bar-wrap">
+        <div class="chart-bar ${isToday?"today":""}" style="height:${h}px" title="${day.mins} min"></div>
+      </div>
+      <div class="chart-day ${isToday?"chart-day-today":""}">${day.label}</div>
+    </div>`;
+  }).join("");
+
+  document.getElementById("tpanel-overview").innerHTML = `
+    <div class="tracker-stats-grid">
+      <div class="t-stat-card streak">
+        <div class="t-stat-icon">🔥</div>
+        <div class="t-stat-val">${streak}</div>
+        <div class="t-stat-label">Day Streak</div>
+      </div>
+      <div class="t-stat-card">
+        <div class="t-stat-icon">⏱️</div>
+        <div class="t-stat-val">${todayMins}</div>
+        <div class="t-stat-label">Mins Today</div>
+      </div>
+      <div class="t-stat-card">
+        <div class="t-stat-icon">📅</div>
+        <div class="t-stat-val">${weekMins}</div>
+        <div class="t-stat-label">Mins This Week</div>
+      </div>
+      <div class="t-stat-card">
+        <div class="t-stat-icon">📝</div>
+        <div class="t-stat-val">${d.quizzesTaken||0}</div>
+        <div class="t-stat-label">Quizzes Taken</div>
+      </div>
+      <div class="t-stat-card">
+        <div class="t-stat-icon">🧪</div>
+        <div class="t-stat-val">${d.mockTestsTaken||0}</div>
+        <div class="t-stat-label">Mock Tests</div>
+      </div>
+      <div class="t-stat-card">
+        <div class="t-stat-icon">💬</div>
+        <div class="t-stat-val">${d.totalMsgs||0}</div>
+        <div class="t-stat-label">Questions Asked</div>
+      </div>
+    </div>
+
+    <div class="tracker-section-label">Study Time — Last 7 Days</div>
+    <div class="weekly-chart">${chartBars}</div>
+
+    <div class="tracker-section-label" style="margin-top:14px">Study Timer</div>
+    <div class="study-timer-block">
+      <div class="study-timer-display" id="studyTimerDisplay">${formatTimerHMS(studyTimerSecs)}</div>
+      <div class="study-timer-subject">
+        <select class="field-input" id="timerSubjectSel" style="flex:1;height:36px;font-size:13px;padding:6px 10px">
+          <option value="">— No subject —</option>
+          ${(d.subjects||[]).map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="study-timer-actions">
+        <button class="timer-btn ${studyTimerRunning?"pause":"start"}" onclick="toggleStudyTimer()" id="timerPlayBtn">
+          ${studyTimerRunning?"⏸ Pause":"▶ Start"}
+        </button>
+        <button class="timer-btn reset" onclick="resetStudyTimer()">↺ Reset</button>
+        <button class="timer-btn log" onclick="logTimerSession()">✓ Log Session</button>
+      </div>
+    </div>
+  `;
+}
+
+function formatTimerHMS(secs) {
+  const h = Math.floor(secs/3600);
+  const m = Math.floor((secs%3600)/60);
+  const s = secs%60;
+  if(h>0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function toggleStudyTimer() {
+  studyTimerRunning = !studyTimerRunning;
+  const btn = document.getElementById("timerPlayBtn");
+  if(studyTimerRunning) {
+    btn.textContent="⏸ Pause"; btn.className="timer-btn pause";
+    studyTimerInt = setInterval(()=>{
+      studyTimerSecs++;
+      const disp = document.getElementById("studyTimerDisplay");
+      if(disp) disp.textContent = formatTimerHMS(studyTimerSecs);
+    },1000);
+  } else {
+    clearInterval(studyTimerInt);
+    if(btn){btn.textContent="▶ Start"; btn.className="timer-btn start";}
+  }
+}
+function resetStudyTimer() {
+  studyTimerRunning=false; clearInterval(studyTimerInt); studyTimerSecs=0;
+  const disp=document.getElementById("studyTimerDisplay"); if(disp)disp.textContent="00:00";
+  const btn=document.getElementById("timerPlayBtn"); if(btn){btn.textContent="▶ Start";btn.className="timer-btn start";}
+}
+function logTimerSession() {
+  if(studyTimerSecs<60){alert("Study for at least 1 minute before logging!");return;}
+  const mins = Math.round(studyTimerSecs/60);
+  const sel = document.getElementById("timerSubjectSel");
+  const subjectId = sel?sel.value||null:null;
+  const notes = prompt(`Add a note for this ${mins}-minute session (optional):`)||"";
+  logStudySession(subjectId||null, mins, notes);
+  resetStudyTimer();
+  alert(`✓ Logged ${mins} minutes${subjectId?" for "+((getTrackerData().subjects||[]).find(s=>s.id===subjectId)||{}).name:""}!`);
+  renderTrackerOverview();
+}
+
+// ─── SUBJECTS PANEL ──────────────────────
+function renderSubjectsPanel() {
+  const d = getTrackerData();
+  const subHTML = (d.subjects||[]).length === 0
+    ? `<div class="tracker-empty">No subjects yet. Add one below!</div>`
+    : (d.subjects||[]).map(sub => {
+        const progress = sub.targetMins > 0 ? Math.min(100, Math.round((sub.totalMins/sub.targetMins)*100)) : null;
+        return `<div class="subject-card">
+          <div class="subject-card-top">
+            <div class="subject-dot" style="background:${sub.color}"></div>
+            <div class="subject-info">
+              <div class="subject-name">${escapeHtml(sub.name)}</div>
+              <div class="subject-meta">${sub.totalMins||0} min studied${sub.targetMins?" / "+sub.targetMins+" min goal":""}</div>
+            </div>
+            <button class="subject-del" onclick="deleteSubject('${sub.id}')">×</button>
+          </div>
+          ${progress!==null?`<div class="subject-prog-wrap"><div class="subject-prog-fill" style="width:${progress}%;background:${sub.color}"></div></div><div class="subject-prog-label">${progress}% of weekly goal</div>`:""}
+        </div>`;
+      }).join("");
+
+  document.getElementById("tpanel-subjects").innerHTML = `
+    <div class="subjects-list">${subHTML}</div>
+    <div class="tracker-section-label" style="margin-top:16px">Add New Subject</div>
+    <div class="add-subject-form">
+      <input id="newSubName" class="field-input" type="text" placeholder="Subject name (e.g. Biology)" style="flex:1"/>
+      <input id="newSubColor" type="color" value="#2a7f5f" class="color-picker" title="Pick colour"/>
+    </div>
+    <div class="add-subject-form" style="margin-top:6px">
+      <input id="newSubTarget" class="field-input" type="number" placeholder="Weekly target (mins, optional)" style="flex:1;font-size:13px"/>
+      <button class="tracker-add-btn" onclick="addSubject()">Add Subject</button>
+    </div>
+  `;
+}
+
+const SUBJECT_COLORS = ["#2a7f5f","#c4622d","#4b6cb7","#c9942a","#7c4dcc","#d94f70","#0097a7","#558b2f"];
+function addSubject() {
+  const name = (document.getElementById("newSubName").value||"").trim();
+  if(!name){document.getElementById("newSubName").focus();return;}
+  const color = document.getElementById("newSubColor").value || SUBJECT_COLORS[Math.floor(Math.random()*SUBJECT_COLORS.length)];
+  const target = parseInt(document.getElementById("newSubTarget").value)||0;
+  const d = getTrackerData();
+  d.subjects = d.subjects||[];
+  d.subjects.push({id:genId(), name, color, targetMins: target, totalMins:0, createdAt:Date.now()});
+  saveTrackerData(d);
+  renderSubjectsPanel();
+}
+function deleteSubject(id) {
+  if(!confirm("Remove this subject?"))return;
+  const d = getTrackerData();
+  d.subjects = (d.subjects||[]).filter(s=>s.id!==id);
+  saveTrackerData(d);
+  renderSubjectsPanel();
+}
+
+// ─── GOALS PANEL ─────────────────────────
+function renderGoalsPanel() {
+  const d = getTrackerData();
+  const goalsHTML = (d.goals||[]).length===0
+    ? `<div class="tracker-empty">No goals yet. Set one below!</div>`
+    : (d.goals||[]).map(g => {
+        const done = g.done||false;
+        return `<div class="goal-card ${done?"done":""}">
+          <div class="goal-check" onclick="toggleGoal('${g.id}')">${done?"✓":""}</div>
+          <div class="goal-text ${done?"goal-done-text":""}">${escapeHtml(g.text)}</div>
+          <div class="goal-due">${g.due||""}</div>
+          <button class="subject-del" onclick="deleteGoal('${g.id}')">×</button>
+        </div>`;
+      }).join("");
+
+  document.getElementById("tpanel-goals").innerHTML = `
+    <div class="goals-list">${goalsHTML}</div>
+    <div class="tracker-section-label" style="margin-top:16px">Add New Goal</div>
+    <div class="add-subject-form">
+      <input id="newGoalText" class="field-input" type="text" placeholder="e.g. Finish Chapter 5 of Biology" style="flex:1"/>
+    </div>
+    <div class="add-subject-form" style="margin-top:6px">
+      <input id="newGoalDue" class="field-input" type="date" style="flex:1"/>
+      <button class="tracker-add-btn" onclick="addGoal()">Add Goal</button>
+    </div>
+    <div class="goal-progress-summary">
+      <div class="gps-text">${(d.goals||[]).filter(g=>g.done).length} / ${(d.goals||[]).length} goals completed</div>
+      <div class="gps-bar-wrap"><div class="gps-bar-fill" style="width:${(d.goals||[]).length>0?Math.round(((d.goals||[]).filter(g=>g.done).length/(d.goals||[]).length)*100):0}%"></div></div>
+    </div>
+  `;
+}
+function addGoal() {
+  const text=(document.getElementById("newGoalText").value||"").trim();
+  if(!text){document.getElementById("newGoalText").focus();return;}
+  const due=document.getElementById("newGoalDue").value||"";
+  const d=getTrackerData();d.goals=d.goals||[];
+  d.goals.push({id:genId(),text,due,done:false,createdAt:Date.now()});
+  saveTrackerData(d);renderGoalsPanel();
+}
+function toggleGoal(id) {
+  const d=getTrackerData();const g=(d.goals||[]).find(x=>x.id===id);
+  if(g)g.done=!g.done;saveTrackerData(d);renderGoalsPanel();
+}
+function deleteGoal(id) {
+  const d=getTrackerData();d.goals=(d.goals||[]).filter(g=>g.id!==id);saveTrackerData(d);renderGoalsPanel();
+}
+
+// ─── LOG PANEL ───────────────────────────
+function renderLogPanel() {
+  const d = getTrackerData();
+  const sessions = [...(d.sessions||[])].reverse().slice(0,30);
+  const subMap = {};(d.subjects||[]).forEach(s=>subMap[s.id]=s);
+
+  const logHTML = sessions.length===0
+    ? `<div class="tracker-empty">No sessions logged yet. Use the timer in Overview!</div>`
+    : sessions.map(s=>{
+        const sub = s.subjectId?subMap[s.subjectId]:null;
+        return `<div class="log-entry">
+          <div class="log-dot" style="background:${sub?sub.color:"var(--border2)"}"></div>
+          <div class="log-info">
+            <div class="log-subject">${sub?escapeHtml(sub.name):"General Study"}</div>
+            <div class="log-notes">${s.notes?escapeHtml(s.notes):""}</div>
+          </div>
+          <div class="log-right">
+            <div class="log-mins">${s.mins} min</div>
+            <div class="log-date">${s.date}</div>
+          </div>
+        </div>`;
+      }).join("");
+
+  document.getElementById("tpanel-log").innerHTML=`
+    <div class="log-list">${logHTML}</div>
+    <div class="tracker-section-label" style="margin-top:16px">Log a Session Manually</div>
+    <div class="add-subject-form">
+      <select id="manualSubSel" class="field-input" style="flex:1;height:40px;font-size:13px;padding:6px 10px">
+        <option value="">— No subject —</option>
+        ${(d.subjects||[]).map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}
+      </select>
+      <input id="manualMins" class="field-input" type="number" min="1" placeholder="Minutes" style="width:90px"/>
+    </div>
+    <div class="add-subject-form" style="margin-top:6px">
+      <input id="manualNotes" class="field-input" type="text" placeholder="Notes (optional)" style="flex:1"/>
+      <button class="tracker-add-btn" onclick="manualLog()">Log</button>
+    </div>
+  `;
+}
+function manualLog() {
+  const mins=parseInt(document.getElementById("manualMins").value)||0;
+  if(mins<1){alert("Enter at least 1 minute.");return;}
+  const subId=document.getElementById("manualSubSel").value||null;
+  const notes=document.getElementById("manualNotes").value.trim();
+  logStudySession(subId,mins,notes);
+  renderLogPanel();
 }
 
 // ─── UTILS ──────────────────────────────
