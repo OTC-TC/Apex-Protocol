@@ -13,7 +13,6 @@
 
 <div id="copy-toast">COPIED ✓</div>
 
-<!-- Overlay (plain, no blur) -->
 <div id="overlay" onclick="closeSidebar()"></div>
 
 <!-- ═══ SIDEBAR ═══ -->
@@ -95,6 +94,29 @@
   </div>
 </div>
 
+<!-- ═══ STUDY TRACKER MODAL ═══ -->
+<div class="modal-bg" id="trackerModal">
+  <div class="modal-box tracker-modal-box">
+    <div class="modal-head">
+      <div class="modal-head-title">📊 Study Tracker</div>
+      <button class="modal-x" onclick="closeModal('trackerModal')">✕</button>
+    </div>
+    <!-- Tab bar -->
+    <div class="tracker-tabs">
+      <button class="tracker-tab active" id="ttab-overview" onclick="switchTrackerTab('overview')">Overview</button>
+      <button class="tracker-tab" id="ttab-subjects" onclick="switchTrackerTab('subjects')">Subjects</button>
+      <button class="tracker-tab" id="ttab-goals" onclick="switchTrackerTab('goals')">Goals</button>
+      <button class="tracker-tab" id="ttab-log" onclick="switchTrackerTab('log')">Log</button>
+    </div>
+    <div class="tracker-body">
+      <div class="tracker-panel" id="tpanel-overview">Loading…</div>
+      <div class="tracker-panel" id="tpanel-subjects" style="display:none"></div>
+      <div class="tracker-panel" id="tpanel-goals" style="display:none"></div>
+      <div class="tracker-panel" id="tpanel-log" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MOCK TEST TAKING SCREEN ═══ -->
 <div class="mock-screen" id="mockScreen">
   <div class="mock-header">
@@ -130,6 +152,7 @@
         <div class="header-subtitle" id="chatLabel">new session</div>
       </div>
       <div class="header-actions">
+        <button class="hdr-btn tracker-btn" onclick="openTracker()">📊 <span>Tracker</span></button>
         <button class="hdr-btn mock-btn" onclick="openModal('mockModal')">⏱️ <span>Mock Test</span></button>
         <button class="hdr-btn quiz-btn" onclick="openModal('quizModal')">📝 <span>Quiz</span></button>
         <button class="hdr-btn" onclick="exportChat()">↓ <span>Export</span></button>
@@ -143,7 +166,7 @@
         <button class="send-btn" id="sendBtn" onclick="askAI()">Send</button>
       </div>
       <div class="input-hints">
-        <span class="hint-chip" onclick="sendHint('Explain photosynthesis simply')">🌱 Explain</span>
+        <span class="hint-chip" onclick="sendHint('Explain miosis simply')">🌱 Explain</span>
         <span class="hint-chip" onclick="sendHint('Quiz me on World War II')">📝 Quiz me</span>
         <span class="hint-chip" onclick="sendHint('Help me solve: 2x + 5 = 13 step by step')">🔢 Solve</span>
         <span class="hint-chip" onclick="sendHint('Real-world example of Newtons 3rd law')">💡 Example</span>
@@ -154,6 +177,5 @@
 </div>
 
 <script src="script.js"></script>
-</script>
 </body>
 </html>
