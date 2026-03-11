@@ -1,5 +1,15 @@
-const API_KEY = "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";
-const MODEL   = "arcee-ai/trinity-large-preview:free";
+const API_KEY_DEFAULT = "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";
+const OR_APP_TITLE = "Apex Study AI";
+const OR_HTTP_REFERER = (typeof window !== "undefined" && window.location && window.location.origin)
+  ? window.location.origin
+  : "https://localhost";
+
+// Model fallback chain — tries each in order on 500/502/503/529 errors
+const MODELS = [
+  "openai/gpt-oss-120b:free",
+
+];
+
 const SYSTEM_PROMPT = `You are Apex Study AI, an intelligent study coach designed to help students learn deeply, not just get answers.
 
 Your goals:
@@ -10,128 +20,117 @@ Your goals:
 5. Adapt explanations to the student's level.
 
 Behavior rules:
-1. EXPLAIN CLEARLY — Start with a simple explanation, give a real-world example, key bullet-point notes, end with a practice question.
-2. SOCRATIC TUTOR MODE — When solving problems do NOT immediately give the answer. Ask guiding questions. Break into steps. Only reveal the final answer if the student asks or gets stuck.
-3. QUIZ GENERATION — Generate 3–5 questions, mix MCQ and short answers. After the student answers, check and explain mistakes.
-4. SIMPLIFY WHEN NEEDED — Use analogies and everyday examples.
-5. SUPPORTIVE STUDY COACH — Be encouraging and motivating.
-6. STRUCTURED RESPONSES — Use this format when possible:
-📘 Concept · 🧠 Example · 📌 Key Points · ❓ Practice Question
+1. EXPLAIN CLEARLY - Start with a simple explanation, give a real-world example, key bullet-point notes, end with a practice question.
+2. SOCRATIC TUTOR MODE - When solving problems do NOT immediately give the answer. Ask guiding questions. Break into steps. Only reveal the final answer if the student asks or gets stuck.
+3. QUIZ GENERATION - Generate 3-5 questions, mix MCQ and short answers. After the student answers, check and explain mistakes.
+4. SIMPLIFY WHEN NEEDED - Use analogies and everyday examples.
+5. SUPPORTIVE STUDY COACH - Be encouraging and motivating.
+6. STRUCTURED RESPONSES - Use this format when possible:
+Concept / Example / Key Points / Practice Question
 Always use markdown formatting.`;
 
-// ─── STORAGE ────────────────────────────
+// Storage keys
 const SK_SESSIONS="apexStudy_sessions",SK_ACTIVE="apexStudy_activeId",SK_MSG="apexStudy_msgs_";
 const SK_TRACKER="apexStudy_tracker";
+const SK_API_KEY="apexStudy_apiKey";
 let activeSessionId=null,chatHistory=[],studyProgress=0,isLoading=false;
 let pillState={qtype:"mixed",qnum:3,mnum:5,mtype:"mcq",mtime:10,mdiff:"medium"};
 let mockQuestions=[],mockAnswers={},mockCorrectAnswers={},mockExplanations={};
 let mockTimerInt=null,mockSecsLeft=0;
+const MAX_CHAT_MESSAGES=20;
 
-// ─── STUDY TRACKER STATE ─────────────────
-let trackerData = null;
-let studyTimerInt = null;
-let studyTimerSecs = 0;
-let studyTimerRunning = false;
-let activeSubjectIndex = null;
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function trimMessages(messages,max){
+  if(!Array.isArray(messages))return[];
+  if(messages.length<=max)return messages;
+  const system=messages.find(m=>m.role==="system");
+  const nonSystem=messages.filter(m=>m.role!=="system");
+  const keep=Math.max(1,max-(system?1:0));
+  const tail=nonSystem.slice(-keep);
+  return system?[system,...tail]:tail;
+}
 
-function getTrackerData() {
-  try { return JSON.parse(localStorage.getItem(SK_TRACKER)) || createDefaultTracker(); }
-  catch { return createDefaultTracker(); }
+// Study tracker state
+let trackerData=null,studyTimerInt=null,studyTimerSecs=0,studyTimerRunning=false;
+
+function getTrackerData(){
+  try{return JSON.parse(localStorage.getItem(SK_TRACKER))||createDefaultTracker();}
+  catch{return createDefaultTracker();}
 }
-function saveTrackerData(d) { localStorage.setItem(SK_TRACKER, JSON.stringify(d)); }
-function createDefaultTracker() {
-  return {
-    subjects: [],
-    goals: [],
-    sessions: [], // { date, subjectId, mins, notes }
-    quizzesTaken: 0,
-    mockTestsTaken: 0,
-    totalMsgs: 0,
-    streakDays: [],
-    createdAt: Date.now()
-  };
+function saveTrackerData(d){localStorage.setItem(SK_TRACKER,JSON.stringify(d));}
+function createDefaultTracker(){
+  return{subjects:[],goals:[],sessions:[],quizzesTaken:0,mockTestsTaken:0,totalMsgs:0,streakDays:[],createdAt:Date.now()};
 }
-function ensureToday() {
-  const d = getTrackerData();
-  const today = todayStr();
-  if (!d.streakDays.includes(today)) {
-    d.streakDays.push(today);
-    saveTrackerData(d);
-  }
+function ensureToday(){
+  const d=getTrackerData(),today=todayStr();
+  if(!d.streakDays.includes(today)){d.streakDays.push(today);saveTrackerData(d);}
 }
-function todayStr() {
-  return new Date().toISOString().slice(0,10);
-}
-function getStreak() {
-  const d = getTrackerData();
-  if (!d.streakDays.length) return 0;
-  const days = [...new Set(d.streakDays)].sort();
-  let streak = 0;
-  const today = new Date(); today.setHours(0,0,0,0);
-  for (let i = days.length - 1; i >= 0; i--) {
-    const day = new Date(days[i]); day.setHours(0,0,0,0);
-    const diff = Math.round((today - day) / 86400000);
-    if (diff === streak) streak++;
-    else break;
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function getStreak(){
+  const d=getTrackerData();if(!d.streakDays.length)return 0;
+  const days=[...new Set(d.streakDays)].sort();let streak=0;
+  const today=new Date();today.setHours(0,0,0,0);
+  for(let i=days.length-1;i>=0;i--){
+    const day=new Date(days[i]);day.setHours(0,0,0,0);
+    const diff=Math.round((today-day)/86400000);
+    if(diff===streak)streak++;else break;
   }
   return streak;
 }
-function getTodayMins() {
-  const d = getTrackerData();
-  const today = todayStr();
-  return d.sessions.filter(s => s.date === today).reduce((a,s) => a + (s.mins||0), 0);
+function getTodayMins(){
+  const d=getTrackerData(),today=todayStr();
+  return d.sessions.filter(s=>s.date===today).reduce((a,s)=>a+(s.mins||0),0);
 }
-function getWeekMins() {
-  const d = getTrackerData();
-  const now = new Date();
-  const weekAgo = new Date(now - 7*86400000).toISOString().slice(0,10);
-  return d.sessions.filter(s => s.date >= weekAgo).reduce((a,s) => a + (s.mins||0), 0);
+function getWeekMins(){
+  const d=getTrackerData(),now=new Date();
+  const weekAgo=new Date(now-7*86400000).toISOString().slice(0,10);
+  return d.sessions.filter(s=>s.date>=weekAgo).reduce((a,s)=>a+(s.mins||0),0);
 }
-function logStudySession(subjectId, mins, notes) {
-  const d = getTrackerData();
-  d.sessions.push({ date: todayStr(), subjectId, mins, notes: notes||"" });
-  if (subjectId !== null && subjectId !== undefined) {
-    const sub = d.subjects.find(s => s.id === subjectId);
-    if (sub) sub.totalMins = (sub.totalMins||0) + mins;
-  }
-  saveTrackerData(d);
-  ensureToday();
+function logStudySession(subjectId,mins,notes){
+  const d=getTrackerData();
+  d.sessions.push({date:todayStr(),subjectId,mins,notes:notes||""});
+  if(subjectId!=null){const sub=d.subjects.find(s=>s.id===subjectId);if(sub)sub.totalMins=(sub.totalMins||0)+mins;}
+  saveTrackerData(d);ensureToday();
 }
-function trackQuiz() {
-  const d = getTrackerData(); d.quizzesTaken = (d.quizzesTaken||0)+1;
-  saveTrackerData(d); ensureToday();
-}
-function trackMock() {
-  const d = getTrackerData(); d.mockTestsTaken = (d.mockTestsTaken||0)+1;
-  saveTrackerData(d); ensureToday();
-}
-function trackMsg() {
-  const d = getTrackerData(); d.totalMsgs = (d.totalMsgs||0)+1;
-  saveTrackerData(d); ensureToday();
-}
+function trackQuiz(){const d=getTrackerData();d.quizzesTaken=(d.quizzesTaken||0)+1;saveTrackerData(d);ensureToday();}
+function trackMock(){const d=getTrackerData();d.mockTestsTaken=(d.mockTestsTaken||0)+1;saveTrackerData(d);ensureToday();}
+function trackMsg(){const d=getTrackerData();d.totalMsgs=(d.totalMsgs||0)+1;saveTrackerData(d);ensureToday();}
 
-// ─── PILLS ──────────────────────────────
+// Pills
 function setPill(group,val){
   pillState[group]=val;
   document.querySelectorAll(`[id^="${group}-"]`).forEach(e=>e.classList.remove("on"));
   const t=document.getElementById(group+"-"+val);if(t)t.classList.add("on");
 }
 
-// ─── MODALS ─────────────────────────────
-function openModal(id){document.getElementById(id).classList.add("open")}
-function closeModal(id){document.getElementById(id).classList.remove("open")}
+// Modals
+function openModal(id){document.getElementById(id).classList.add("open");}
+function closeModal(id){document.getElementById(id).classList.remove("open");}
 
-// ─── STORAGE HELPERS ────────────────────
+// Storage helpers
 function getSessions(){try{return JSON.parse(localStorage.getItem(SK_SESSIONS))||[];}catch{return[];}}
-function saveSessions(s){localStorage.setItem(SK_SESSIONS,JSON.stringify(s))}
+function saveSessions(s){localStorage.setItem(SK_SESSIONS,JSON.stringify(s));}
 function getMsgs(id){try{return JSON.parse(localStorage.getItem(SK_MSG+id))||[];}catch{return[];}}
-function saveMsgs(id,m){localStorage.setItem(SK_MSG+id,JSON.stringify(m))}
-function delMsgs(id){localStorage.removeItem(SK_MSG+id)}
-function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
-function getActiveId(){return localStorage.getItem(SK_ACTIVE)||null}
-function setActiveId(id){localStorage.setItem(SK_ACTIVE,id)}
+function saveMsgs(id,m){localStorage.setItem(SK_MSG+id,JSON.stringify(m));}
+function delMsgs(id){localStorage.removeItem(SK_MSG+id);}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function getActiveId(){return localStorage.getItem(SK_ACTIVE)||null;}
+function setActiveId(id){localStorage.setItem(SK_ACTIVE,id);}
+function getApiKey(){return localStorage.getItem(SK_API_KEY)||API_KEY_DEFAULT||"";}
+function setApiKey(k){localStorage.setItem(SK_API_KEY,k);}
+function requireApiKey(){
+  let key=getApiKey();
+  if(key)return key;
+  const input=prompt("Enter your OpenRouter API key:");
+  if(input&&input.trim()){
+    key=input.trim();
+    setApiKey(key);
+    return key;
+  }
+  throw new Error("Missing API key. Please add a valid OpenRouter key.");
+}
 
-// ─── SESSIONS ───────────────────────────
+// Sessions
 function createSession(label){
   const id=genId(),s={id,label:label||"New Session",createdAt:Date.now(),updatedAt:Date.now()};
   const sessions=getSessions();sessions.unshift(s);saveSessions(sessions);
@@ -156,16 +155,13 @@ function loadSession(id){
   renderChat();renderHistoryList();closeSidebar();
 }
 
-// ─── INIT ───────────────────────────────
+// Init
 window.onload=function(){
-  trackerData = getTrackerData();
-  ensureToday();
-
+  trackerData=getTrackerData();ensureToday();
   const savedId=getActiveId(),sessions=getSessions();
   if(savedId&&sessions.find(s=>s.id===savedId))loadSession(savedId);
   else if(sessions.length)loadSession(sessions[0].id);
   else{const s=createSession("New Session");loadSession(s.id);}
-
   document.getElementById("userInput").addEventListener("keydown",e=>{
     if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();askAI();}
   });
@@ -177,7 +173,7 @@ window.onload=function(){
   document.getElementById("userInput").focus();
 };
 
-// ─── NEW / CLEAR ────────────────────────
+// New / Clear
 function newChat(){
   const s=createSession("New Session");studyProgress=0;
   document.getElementById("progressFill").style.width="0%";
@@ -200,7 +196,7 @@ function deleteSession(id,e){
   }else renderHistoryList();
 }
 
-// ─── SIDEBAR ────────────────────────────
+// Sidebar
 function toggleSidebar(){
   const sb=document.getElementById("sidebar"),ov=document.getElementById("overlay");
   if(sb.classList.contains("open")){closeSidebar();}
@@ -211,7 +207,7 @@ function closeSidebar(){
   document.getElementById("overlay").classList.remove("visible");
 }
 
-// ─── RENDER HISTORY ─────────────────────
+// Render history
 function renderHistoryList(){
   const list=document.getElementById("historyList"),sessions=getSessions();
   if(!sessions.length){list.innerHTML=`<div class="history-empty">No sessions yet.<br>Start studying!</div>`;return;}
@@ -228,14 +224,14 @@ function renderHistoryList(){
       const active=s.id===activeSessionId?"active":"";
       html+=`<div class="history-item ${active}" onclick="loadSession('${s.id}')">
         <div class="history-item-text">${escapeHtml(s.label)}</div>
-        <button class="history-item-del" onclick="deleteSession('${s.id}',event)">×</button>
+        <button class="history-item-del" onclick="deleteSession('${s.id}',event)">x</button>
       </div>`;
     });
   }
   list.innerHTML=html;
 }
 
-// ─── RENDER CHAT ────────────────────────
+// Render chat
 function renderChat(){
   const box=document.getElementById("chatBox");
   const msgs=chatHistory.filter(m=>m.role!=="system");
@@ -243,7 +239,7 @@ function renderChat(){
     box.innerHTML=`<div class="welcome-screen">
       <div class="welcome-badge">📚</div>
       <div class="welcome-title">Your Personal Study Coach</div>
-      <div class="welcome-sub">Ask me to explain any concept, quiz you on a topic, or walk you through problems step by step. I'm here to help you truly understand — not just memorize.</div>
+      <div class="welcome-sub">Ask me to explain any concept, quiz you on a topic, or walk you through problems step by step.</div>
       <div class="welcome-chips">
         <div class="chip" onclick="sendHint('What is the difference between mitosis and meiosis?')">🔬 Biology</div>
         <div class="chip" onclick="sendHint('Explain Newton\\'s laws of motion with examples')">⚙️ Physics</div>
@@ -260,7 +256,7 @@ function renderChat(){
   box.scrollTop=box.scrollHeight;
 }
 
-// ─── ADD MESSAGE ────────────────────────
+// Add message
 function addMessage(text,role,animate=true){
   const box=document.getElementById("chatBox");
   const w=box.querySelector(".welcome-screen");if(w)w.remove();
@@ -304,8 +300,70 @@ function typeEffect(text){
     }
   },10);
 }
+function formatApiError(err){
+  const msg=(err&&err.message)?err.message:"Connection issue. Check your API key or try again.";
+  if(/401|unauthorized|invalid api key|api key|key/i.test(msg)){
+    localStorage.removeItem(SK_API_KEY);
+    return "Warning: API key issue. Please re-enter your OpenRouter key and try again.";
+  }
+  return "Warning: "+msg;
+}
 
-// ─── ASK AI ─────────────────────────────
+
+
+
+// ─── OPENROUTER API ─────────────────────────────────────────
+// Tries models in sequence on retryable errors (500/502/503/529)
+async function callOpenRouter(payload, modelIndex, attempt) {
+  if(modelIndex === undefined) modelIndex = 0;
+  if(attempt === undefined) attempt = 0;
+  var model = MODELS[Math.min(modelIndex, MODELS.length - 1)];
+
+  var apiKey = requireApiKey();
+  var res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json",
+      "HTTP-Referer": OR_HTTP_REFERER,
+      "X-Title": OR_APP_TITLE
+    },
+    body: JSON.stringify(Object.assign({}, payload, { model: model }))
+  });
+
+  var data = null;
+  try { data = await res.json(); } catch(e) {}
+
+  if (!res.ok) {
+    var errMsg = (data && data.error && data.error.message)
+      || (data && data.message)
+      || ("API Error " + res.status);
+    var retryable = [429, 500, 502, 503, 529];
+    if (retryable.indexOf(res.status) !== -1) {
+      if (attempt < 2) {
+        await sleep(250 * Math.pow(2, attempt));
+        return callOpenRouter(payload, modelIndex, attempt + 1);
+      }
+      if (modelIndex < MODELS.length - 1) {
+        console.warn("Model " + model + " failed (" + res.status + "), trying next fallback...");
+        return callOpenRouter(payload, modelIndex + 1, 0);
+      }
+    }
+    throw new Error(errMsg);
+  }
+
+  // Handle reasoning models that put response in reasoning_details instead of content
+  var choice = data && data.choices && data.choices[0];
+  if (choice && (!choice.message.content || choice.message.content === "")) {
+    var details = (choice.message.reasoning_details) || [];
+    var extracted = details.filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("\n").trim();
+    data.choices[0].message.content = extracted || "I wasn't able to generate a response. Please try again.";
+  }
+
+  return data;
+}
+
+// Ask AI
 async function askAI(){
   if(isLoading)return;
   const input=document.getElementById("userInput"),userMessage=input.value.trim();
@@ -315,46 +373,44 @@ async function askAI(){
   input.value="";input.focus();
   const s=getSessions().find(x=>x.id===activeSessionId);
   if(s&&(s.label==="New Session"||s.label==="New Chat")){
-    const label=userMessage.slice(0,42)+(userMessage.length>42?"…":"");
+    const label=userMessage.slice(0,42)+(userMessage.length>42?"...":"");
     updateLabel(activeSessionId,label);document.getElementById("chatLabel").textContent=label.toLowerCase();
   }
   updateProgress();showTyping();trackMsg();
   try{
-    const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
-      method:"POST",headers:{Authorization:`Bearer ${API_KEY}`,"Content-Type":"application/json"},
-      body:JSON.stringify({model:MODEL,messages:chatHistory,temperature:0.7})
-    });
-    if(!res.ok)throw new Error("API Error "+res.status);
-    const data=await res.json();removeTyping();
-    const aiText=data?.choices?.[0]?.message?.content||"Unexpected response.";
+    const data=await callOpenRouter({messages:trimMessages(chatHistory,MAX_CHAT_MESSAGES),temperature:0.7});
+    removeTyping();
+    const aiText=(data&&data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"Unexpected response.";
     typeEffect(aiText);chatHistory.push({role:"assistant",content:aiText});
     saveMsgs(activeSessionId,chatHistory);updateTime(activeSessionId);
-  }catch(err){removeTyping();addMessage("⚠️ Connection issue. Check your API key or try again.","bot");console.error(err);}
+  }catch(err){
+    removeTyping();
+    addMessage(formatApiError(err),"bot");
+    console.error(err);
+  }
   isLoading=false;document.getElementById("sendBtn").disabled=false;
 }
 function sendHint(text){document.getElementById("userInput").value=text;askAI();}
 function exportChat(){
-  let text="APEX STUDY AI — SESSION EXPORT\n"+"═".repeat(40)+"\n\n";
+  let text="APEX STUDY AI - SESSION EXPORT\n"+"=".repeat(40)+"\n\n";
   chatHistory.forEach(msg=>{
-    if(msg.role!=="system")text+=(msg.role==="user"?"YOU":"APEX STUDY AI")+":\n"+msg.content+"\n\n"+"─".repeat(30)+"\n\n";
+    if(msg.role!=="system")text+=(msg.role==="user"?"YOU":"APEX STUDY AI")+":\n"+msg.content+"\n\n"+"-".repeat(30)+"\n\n";
   });
   const blob=new Blob([text],{type:"text/plain"}),a=document.createElement("a");
   a.href=URL.createObjectURL(blob);a.download="apex-study-session.txt";a.click();
 }
 
-// ─── QUICK QUIZ ─────────────────────────
+// Quick quiz
 function startQuiz(){
   const topic=document.getElementById("quizTopic").value.trim();
   if(!topic){document.getElementById("quizTopic").focus();return;}
   const tl={mixed:"mixed (MCQ and short answer)",mcq:"multiple choice",short:"short answer",truefalse:"true/false"}[pillState.qtype];
-  const prompt=`Please generate a ${pillState.qnum}-question ${tl} quiz on: "${topic}". Number each question clearly (Q1, Q2…). For MCQ provide 4 options labeled A–D. Don't give the answers yet — wait for my responses.`;
+  const prompt=`Please generate a ${pillState.qnum}-question ${tl} quiz on: "${topic}". Number each question clearly (Q1, Q2...). For MCQ provide 4 options labeled A-D. Don't give the answers yet - wait for my responses.`;
   closeModal("quizModal");document.getElementById("quizTopic").value="";
   document.getElementById("userInput").value=prompt;trackQuiz();askAI();
 }
 
-// ═══════════════════════════════════════
-//  MOCK TEST
-// ═══════════════════════════════════════
+// Mock test
 async function startMockTest(){
   const topic=document.getElementById("mockTopic").value.trim();
   if(!topic){document.getElementById("mockTopic").focus();return;}
@@ -363,12 +419,12 @@ async function startMockTest(){
   const typeDesc=mtype==="mcq"?"MCQ only (4 options labeled A, B, C, D)":"a mix of MCQ (4 options labeled A, B, C, D) and short answer questions";
 
   document.getElementById("mockScreen").classList.add("active");
-  document.getElementById("mockTestTitle").textContent=`📋 ${topic}`;
+  document.getElementById("mockTestTitle").textContent="📋 "+topic;
   document.getElementById("mockTimer").textContent=formatTime(mtime*60);
   document.getElementById("mockBody").innerHTML=`
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 20px;gap:16px">
       <div style="width:46px;height:46px;border:3px solid #e8e2d6;border-top-color:#c9942a;border-radius:50%;animation:spin .8s linear infinite"></div>
-      <div style="font-family:'DM Mono',monospace;font-size:13px;color:#7a6a50">Generating ${mnum} ${mdiff} questions on <strong style="color:#1c1812">${escapeHtml(topic)}</strong>…</div>
+      <div style="font-family:'DM Mono',monospace;font-size:13px;color:#7a6a50">Generating ${mnum} ${mdiff} questions on <strong style="color:#1c1812">${escapeHtml(topic)}</strong>...</div>
       <div style="font-size:12px;color:rgba(28,24,18,0.4)">This may take a few seconds</div>
     </div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
@@ -404,16 +460,14 @@ STRICT RULES:
 - Output ONLY the JSON array, nothing else`;
 
   try{
-    const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
-      method:"POST",
-      headers:{Authorization:`Bearer ${API_KEY}`,"Content-Type":"application/json"},
-      body:JSON.stringify({model:MODEL,temperature:0.3,messages:[
+    const data=await callOpenRouter({
+      temperature:0.3,
+      messages:[
         {role:"system",content:"You are a JSON generator. You output only valid JSON arrays with no extra text, no markdown code fences, no explanation. Only the raw JSON array."},
         {role:"user",content:prompt}
-      ]})
+      ]
     });
-    const data=await res.json();
-    let raw=data?.choices?.[0]?.message?.content||"";
+    let raw=(data&&data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";
     raw=raw.replace(/```json|```/g,"").trim();
     const si=raw.indexOf("["),ei=raw.lastIndexOf("]");
     if(si!==-1&&ei!==-1)raw=raw.slice(si,ei+1);
@@ -421,7 +475,7 @@ STRICT RULES:
     if(!Array.isArray(mockQuestions)||mockQuestions.length===0)throw new Error("Empty array");
   }catch(err){
     document.getElementById("mockScreen").classList.remove("active");
-    addMessage("⚠️ Could not generate mock test. The AI returned an unexpected format. Please try again.","bot");
+    addMessage(formatApiError(err),"bot");
     console.error(err);return;
   }
 
@@ -477,7 +531,7 @@ function renderMockBody(){
       return `<div class="mock-q-card${answered?" answered":""}" id="mqc-${q.num}">
         <div class="mock-q-num">Question ${idx+1} of ${total} &nbsp;·&nbsp; Short Answer</div>
         <div class="mock-q-text">${escapeHtml(q.question)}</div>
-        <textarea class="mock-short-input" placeholder="Write your answer here…" oninput="saveShort(${q.num},this.value)">${val}</textarea>
+        <textarea class="mock-short-input" placeholder="Write your answer here..." oninput="saveShort(${q.num},this.value)">${val}</textarea>
       </div>`;
     }
   }).join("");
@@ -503,9 +557,7 @@ function updateMockProgress(){
 }
 function confirmSubmit(){
   const ans=Object.keys(mockAnswers).length,total=mockQuestions.length;
-  if(ans<total){
-    if(!confirm(`You have answered ${ans} of ${total} questions. Submit anyway?`))return;
-  }
+  if(ans<total){if(!confirm(`You have answered ${ans} of ${total} questions. Submit anyway?`))return;}
   submitMockTest();
 }
 
@@ -513,7 +565,7 @@ function submitMockTest(){
   clearInterval(mockTimerInt);
   document.getElementById("mockScreen").classList.remove("active");
   const timeTaken=pillState.mtime*60-mockSecsLeft;
-  logStudySession(null, Math.round(timeTaken/60)||1, "Mock test");
+  logStudySession(null,Math.round(timeTaken/60)||1,"Mock test");
 
   const mcqQs=mockQuestions.filter(q=>q.type==="mcq");
   const shortQs=mockQuestions.filter(q=>q.type==="short");
@@ -593,54 +645,41 @@ function closeResults(){
   mockQuestions=[];mockAnswers={};
 }
 
-// ════════════════════════════════════════
-//  STUDY TRACKER
-// ════════════════════════════════════════
-
-function openTracker() {
-  closeModal("quizModal"); closeModal("mockModal");
+// Study tracker
+function openTracker(){
+  closeModal("quizModal");closeModal("mockModal");
   renderTrackerOverview();
   openModal("trackerModal");
 }
 
-let trackerTab = "overview";
-function switchTrackerTab(tab) {
-  trackerTab = tab;
-  document.querySelectorAll(".tracker-tab").forEach(t => t.classList.remove("active"));
-  const el = document.getElementById("ttab-"+tab);
-  if(el) el.classList.add("active");
-  document.querySelectorAll(".tracker-panel").forEach(p => p.style.display = "none");
-  const panel = document.getElementById("tpanel-"+tab);
-  if(panel) panel.style.display = "block";
-
-  if(tab==="overview") renderTrackerOverview();
-  if(tab==="subjects") renderSubjectsPanel();
-  if(tab==="goals") renderGoalsPanel();
-  if(tab==="log") renderLogPanel();
+let trackerTab="overview";
+function switchTrackerTab(tab){
+  trackerTab=tab;
+  document.querySelectorAll(".tracker-tab").forEach(t=>t.classList.remove("active"));
+  const el=document.getElementById("ttab-"+tab);if(el)el.classList.add("active");
+  document.querySelectorAll(".tracker-panel").forEach(p=>p.style.display="none");
+  const panel=document.getElementById("tpanel-"+tab);if(panel)panel.style.display="block";
+  if(tab==="overview")renderTrackerOverview();
+  if(tab==="subjects")renderSubjectsPanel();
+  if(tab==="goals")renderGoalsPanel();
+  if(tab==="log")renderLogPanel();
 }
 
-function renderTrackerOverview() {
-  const d = getTrackerData();
-  const streak = getStreak();
-  const todayMins = getTodayMins();
-  const weekMins = getWeekMins();
-  const totalSessions = d.sessions.length;
-  const allMins = d.sessions.reduce((a,s)=>a+(s.mins||0),0);
-
-  // Weekly chart data (last 7 days)
-  const days = [];
-  for(let i=6;i>=0;i--) {
-    const dt = new Date(); dt.setDate(dt.getDate()-i);
-    const str = dt.toISOString().slice(0,10);
-    const dayMins = d.sessions.filter(s=>s.date===str).reduce((a,s)=>a+(s.mins||0),0);
-    days.push({ label: dt.toLocaleDateString(undefined,{weekday:"short"}), mins: dayMins, date: str });
+function renderTrackerOverview(){
+  const d=getTrackerData();
+  const streak=getStreak(),todayMins=getTodayMins(),weekMins=getWeekMins();
+  const days=[];
+  for(let i=6;i>=0;i--){
+    const dt=new Date();dt.setDate(dt.getDate()-i);
+    const str=dt.toISOString().slice(0,10);
+    const dayMins=d.sessions.filter(s=>s.date===str).reduce((a,s)=>a+(s.mins||0),0);
+    days.push({label:dt.toLocaleDateString(undefined,{weekday:"short"}),mins:dayMins,date:str});
   }
-  const maxMins = Math.max(...days.map(x=>x.mins), 1);
-  const todayFmt = todayStr();
-
-  const chartBars = days.map(day => {
-    const h = Math.max(4, Math.round((day.mins/maxMins)*80));
-    const isToday = day.date === todayFmt;
+  const maxMins=Math.max(...days.map(x=>x.mins),1);
+  const todayFmt=todayStr();
+  const chartBars=days.map(day=>{
+    const h=Math.max(4,Math.round((day.mins/maxMins)*80));
+    const isToday=day.date===todayFmt;
     return `<div class="chart-col">
       <div class="chart-bar-wrap">
         <div class="chart-bar ${isToday?"today":""}" style="height:${h}px" title="${day.mins} min"></div>
@@ -649,43 +688,17 @@ function renderTrackerOverview() {
     </div>`;
   }).join("");
 
-  document.getElementById("tpanel-overview").innerHTML = `
+  document.getElementById("tpanel-overview").innerHTML=`
     <div class="tracker-stats-grid">
-      <div class="t-stat-card streak">
-        <div class="t-stat-icon">🔥</div>
-        <div class="t-stat-val">${streak}</div>
-        <div class="t-stat-label">Day Streak</div>
-      </div>
-      <div class="t-stat-card">
-        <div class="t-stat-icon">⏱️</div>
-        <div class="t-stat-val">${todayMins}</div>
-        <div class="t-stat-label">Mins Today</div>
-      </div>
-      <div class="t-stat-card">
-        <div class="t-stat-icon">📅</div>
-        <div class="t-stat-val">${weekMins}</div>
-        <div class="t-stat-label">Mins This Week</div>
-      </div>
-      <div class="t-stat-card">
-        <div class="t-stat-icon">📝</div>
-        <div class="t-stat-val">${d.quizzesTaken||0}</div>
-        <div class="t-stat-label">Quizzes Taken</div>
-      </div>
-      <div class="t-stat-card">
-        <div class="t-stat-icon">🧪</div>
-        <div class="t-stat-val">${d.mockTestsTaken||0}</div>
-        <div class="t-stat-label">Mock Tests</div>
-      </div>
-      <div class="t-stat-card">
-        <div class="t-stat-icon">💬</div>
-        <div class="t-stat-val">${d.totalMsgs||0}</div>
-        <div class="t-stat-label">Questions Asked</div>
-      </div>
+      <div class="t-stat-card streak"><div class="t-stat-icon">🔥</div><div class="t-stat-val">${streak}</div><div class="t-stat-label">Day Streak</div></div>
+      <div class="t-stat-card"><div class="t-stat-icon">⏱️</div><div class="t-stat-val">${todayMins}</div><div class="t-stat-label">Mins Today</div></div>
+      <div class="t-stat-card"><div class="t-stat-icon">📅</div><div class="t-stat-val">${weekMins}</div><div class="t-stat-label">Mins This Week</div></div>
+      <div class="t-stat-card"><div class="t-stat-icon">📝</div><div class="t-stat-val">${d.quizzesTaken||0}</div><div class="t-stat-label">Quizzes Taken</div></div>
+      <div class="t-stat-card"><div class="t-stat-icon">🧪</div><div class="t-stat-val">${d.mockTestsTaken||0}</div><div class="t-stat-label">Mock Tests</div></div>
+      <div class="t-stat-card"><div class="t-stat-icon">💬</div><div class="t-stat-val">${d.totalMsgs||0}</div><div class="t-stat-label">Questions Asked</div></div>
     </div>
-
     <div class="tracker-section-label">Study Time — Last 7 Days</div>
     <div class="weekly-chart">${chartBars}</div>
-
     <div class="tracker-section-label" style="margin-top:14px">Study Timer</div>
     <div class="study-timer-block">
       <div class="study-timer-display" id="studyTimerDisplay">${formatTimerHMS(studyTimerSecs)}</div>
@@ -702,71 +715,67 @@ function renderTrackerOverview() {
         <button class="timer-btn reset" onclick="resetStudyTimer()">↺ Reset</button>
         <button class="timer-btn log" onclick="logTimerSession()">✓ Log Session</button>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function formatTimerHMS(secs) {
-  const h = Math.floor(secs/3600);
-  const m = Math.floor((secs%3600)/60);
-  const s = secs%60;
-  if(h>0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+function formatTimerHMS(secs){
+  const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
+  if(h>0)return`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-function toggleStudyTimer() {
-  studyTimerRunning = !studyTimerRunning;
-  const btn = document.getElementById("timerPlayBtn");
-  if(studyTimerRunning) {
-    btn.textContent="⏸ Pause"; btn.className="timer-btn pause";
-    studyTimerInt = setInterval(()=>{
+function toggleStudyTimer(){
+  studyTimerRunning=!studyTimerRunning;
+  const btn=document.getElementById("timerPlayBtn");
+  if(studyTimerRunning){
+    btn.textContent="⏸ Pause";btn.className="timer-btn pause";
+    studyTimerInt=setInterval(()=>{
       studyTimerSecs++;
-      const disp = document.getElementById("studyTimerDisplay");
-      if(disp) disp.textContent = formatTimerHMS(studyTimerSecs);
+      const disp=document.getElementById("studyTimerDisplay");
+      if(disp)disp.textContent=formatTimerHMS(studyTimerSecs);
     },1000);
-  } else {
+  }else{
     clearInterval(studyTimerInt);
-    if(btn){btn.textContent="▶ Start"; btn.className="timer-btn start";}
+    if(btn){btn.textContent="▶ Start";btn.className="timer-btn start";}
   }
 }
-function resetStudyTimer() {
-  studyTimerRunning=false; clearInterval(studyTimerInt); studyTimerSecs=0;
-  const disp=document.getElementById("studyTimerDisplay"); if(disp)disp.textContent="00:00";
-  const btn=document.getElementById("timerPlayBtn"); if(btn){btn.textContent="▶ Start";btn.className="timer-btn start";}
+function resetStudyTimer(){
+  studyTimerRunning=false;clearInterval(studyTimerInt);studyTimerSecs=0;
+  const disp=document.getElementById("studyTimerDisplay");if(disp)disp.textContent="00:00";
+  const btn=document.getElementById("timerPlayBtn");if(btn){btn.textContent="▶ Start";btn.className="timer-btn start";}
 }
-function logTimerSession() {
+function logTimerSession(){
   if(studyTimerSecs<60){alert("Study for at least 1 minute before logging!");return;}
-  const mins = Math.round(studyTimerSecs/60);
-  const sel = document.getElementById("timerSubjectSel");
-  const subjectId = sel?sel.value||null:null;
-  const notes = prompt(`Add a note for this ${mins}-minute session (optional):`)||"";
-  logStudySession(subjectId||null, mins, notes);
+  const mins=Math.round(studyTimerSecs/60);
+  const sel=document.getElementById("timerSubjectSel");
+  const subjectId=sel?sel.value||null:null;
+  const notes=prompt(`Add a note for this ${mins}-minute session (optional):`)||"";
+  logStudySession(subjectId||null,mins,notes);
   resetStudyTimer();
-  alert(`✓ Logged ${mins} minutes${subjectId?" for "+((getTrackerData().subjects||[]).find(s=>s.id===subjectId)||{}).name:""}!`);
+  alert(`✓ Logged ${mins} minutes!`);
   renderTrackerOverview();
 }
 
-// ─── SUBJECTS PANEL ──────────────────────
-function renderSubjectsPanel() {
-  const d = getTrackerData();
-  const subHTML = (d.subjects||[]).length === 0
-    ? `<div class="tracker-empty">No subjects yet. Add one below!</div>`
-    : (d.subjects||[]).map(sub => {
-        const progress = sub.targetMins > 0 ? Math.min(100, Math.round((sub.totalMins/sub.targetMins)*100)) : null;
-        return `<div class="subject-card">
-          <div class="subject-card-top">
-            <div class="subject-dot" style="background:${sub.color}"></div>
-            <div class="subject-info">
-              <div class="subject-name">${escapeHtml(sub.name)}</div>
-              <div class="subject-meta">${sub.totalMins||0} min studied${sub.targetMins?" / "+sub.targetMins+" min goal":""}</div>
-            </div>
-            <button class="subject-del" onclick="deleteSubject('${sub.id}')">×</button>
+function renderSubjectsPanel(){
+  const d=getTrackerData();
+  const subHTML=(d.subjects||[]).length===0
+    ?`<div class="tracker-empty">No subjects yet. Add one below!</div>`
+    :(d.subjects||[]).map(sub=>{
+      const progress=sub.targetMins>0?Math.min(100,Math.round((sub.totalMins/sub.targetMins)*100)):null;
+      return`<div class="subject-card">
+        <div class="subject-card-top">
+          <div class="subject-dot" style="background:${sub.color}"></div>
+          <div class="subject-info">
+            <div class="subject-name">${escapeHtml(sub.name)}</div>
+            <div class="subject-meta">${sub.totalMins||0} min studied${sub.targetMins?" / "+sub.targetMins+" min goal":""}</div>
           </div>
-          ${progress!==null?`<div class="subject-prog-wrap"><div class="subject-prog-fill" style="width:${progress}%;background:${sub.color}"></div></div><div class="subject-prog-label">${progress}% of weekly goal</div>`:""}
-        </div>`;
-      }).join("");
+          <button class="subject-del" onclick="deleteSubject('${sub.id}')">x</button>
+        </div>
+        ${progress!==null?`<div class="subject-prog-wrap"><div class="subject-prog-fill" style="width:${progress}%;background:${sub.color}"></div></div><div class="subject-prog-label">${progress}% of weekly goal</div>`:""}
+      </div>`;
+    }).join("");
 
-  document.getElementById("tpanel-subjects").innerHTML = `
+  document.getElementById("tpanel-subjects").innerHTML=`
     <div class="subjects-list">${subHTML}</div>
     <div class="tracker-section-label" style="margin-top:16px">Add New Subject</div>
     <div class="add-subject-form">
@@ -776,46 +785,40 @@ function renderSubjectsPanel() {
     <div class="add-subject-form" style="margin-top:6px">
       <input id="newSubTarget" class="field-input" type="number" placeholder="Weekly target (mins, optional)" style="flex:1;font-size:13px"/>
       <button class="tracker-add-btn" onclick="addSubject()">Add Subject</button>
-    </div>
-  `;
+    </div>`;
 }
 
-const SUBJECT_COLORS = ["#2a7f5f","#c4622d","#4b6cb7","#c9942a","#7c4dcc","#d94f70","#0097a7","#558b2f"];
-function addSubject() {
-  const name = (document.getElementById("newSubName").value||"").trim();
+const SUBJECT_COLORS=["#2a7f5f","#c4622d","#4b6cb7","#c9942a","#7c4dcc","#d94f70","#0097a7","#558b2f"];
+function addSubject(){
+  const name=(document.getElementById("newSubName").value||"").trim();
   if(!name){document.getElementById("newSubName").focus();return;}
-  const color = document.getElementById("newSubColor").value || SUBJECT_COLORS[Math.floor(Math.random()*SUBJECT_COLORS.length)];
-  const target = parseInt(document.getElementById("newSubTarget").value)||0;
-  const d = getTrackerData();
-  d.subjects = d.subjects||[];
-  d.subjects.push({id:genId(), name, color, targetMins: target, totalMins:0, createdAt:Date.now()});
-  saveTrackerData(d);
-  renderSubjectsPanel();
+  const color=document.getElementById("newSubColor").value||SUBJECT_COLORS[Math.floor(Math.random()*SUBJECT_COLORS.length)];
+  const target=parseInt(document.getElementById("newSubTarget").value)||0;
+  const d=getTrackerData();d.subjects=d.subjects||[];
+  d.subjects.push({id:genId(),name,color,targetMins:target,totalMins:0,createdAt:Date.now()});
+  saveTrackerData(d);renderSubjectsPanel();
 }
-function deleteSubject(id) {
+function deleteSubject(id){
   if(!confirm("Remove this subject?"))return;
-  const d = getTrackerData();
-  d.subjects = (d.subjects||[]).filter(s=>s.id!==id);
-  saveTrackerData(d);
-  renderSubjectsPanel();
+  const d=getTrackerData();d.subjects=(d.subjects||[]).filter(s=>s.id!==id);
+  saveTrackerData(d);renderSubjectsPanel();
 }
 
-// ─── GOALS PANEL ─────────────────────────
-function renderGoalsPanel() {
-  const d = getTrackerData();
-  const goalsHTML = (d.goals||[]).length===0
-    ? `<div class="tracker-empty">No goals yet. Set one below!</div>`
-    : (d.goals||[]).map(g => {
-        const done = g.done||false;
-        return `<div class="goal-card ${done?"done":""}">
-          <div class="goal-check" onclick="toggleGoal('${g.id}')">${done?"✓":""}</div>
-          <div class="goal-text ${done?"goal-done-text":""}">${escapeHtml(g.text)}</div>
-          <div class="goal-due">${g.due||""}</div>
-          <button class="subject-del" onclick="deleteGoal('${g.id}')">×</button>
-        </div>`;
-      }).join("");
+function renderGoalsPanel(){
+  const d=getTrackerData();
+  const goalsHTML=(d.goals||[]).length===0
+    ?`<div class="tracker-empty">No goals yet. Set one below!</div>`
+    :(d.goals||[]).map(g=>{
+      const done=g.done||false;
+      return`<div class="goal-card ${done?"done":""}">
+        <div class="goal-check" onclick="toggleGoal('${g.id}')">${done?"✓":""}</div>
+        <div class="goal-text ${done?"goal-done-text":""}">${escapeHtml(g.text)}</div>
+        <div class="goal-due">${g.due||""}</div>
+        <button class="subject-del" onclick="deleteGoal('${g.id}')">x</button>
+      </div>`;
+    }).join("");
 
-  document.getElementById("tpanel-goals").innerHTML = `
+  document.getElementById("tpanel-goals").innerHTML=`
     <div class="goals-list">${goalsHTML}</div>
     <div class="tracker-section-label" style="margin-top:16px">Add New Goal</div>
     <div class="add-subject-form">
@@ -828,10 +831,9 @@ function renderGoalsPanel() {
     <div class="goal-progress-summary">
       <div class="gps-text">${(d.goals||[]).filter(g=>g.done).length} / ${(d.goals||[]).length} goals completed</div>
       <div class="gps-bar-wrap"><div class="gps-bar-fill" style="width:${(d.goals||[]).length>0?Math.round(((d.goals||[]).filter(g=>g.done).length/(d.goals||[]).length)*100):0}%"></div></div>
-    </div>
-  `;
+    </div>`;
 }
-function addGoal() {
+function addGoal(){
   const text=(document.getElementById("newGoalText").value||"").trim();
   if(!text){document.getElementById("newGoalText").focus();return;}
   const due=document.getElementById("newGoalDue").value||"";
@@ -839,36 +841,34 @@ function addGoal() {
   d.goals.push({id:genId(),text,due,done:false,createdAt:Date.now()});
   saveTrackerData(d);renderGoalsPanel();
 }
-function toggleGoal(id) {
+function toggleGoal(id){
   const d=getTrackerData();const g=(d.goals||[]).find(x=>x.id===id);
   if(g)g.done=!g.done;saveTrackerData(d);renderGoalsPanel();
 }
-function deleteGoal(id) {
+function deleteGoal(id){
   const d=getTrackerData();d.goals=(d.goals||[]).filter(g=>g.id!==id);saveTrackerData(d);renderGoalsPanel();
 }
 
-// ─── LOG PANEL ───────────────────────────
-function renderLogPanel() {
-  const d = getTrackerData();
-  const sessions = [...(d.sessions||[])].reverse().slice(0,30);
-  const subMap = {};(d.subjects||[]).forEach(s=>subMap[s.id]=s);
-
-  const logHTML = sessions.length===0
-    ? `<div class="tracker-empty">No sessions logged yet. Use the timer in Overview!</div>`
-    : sessions.map(s=>{
-        const sub = s.subjectId?subMap[s.subjectId]:null;
-        return `<div class="log-entry">
-          <div class="log-dot" style="background:${sub?sub.color:"var(--border2)"}"></div>
-          <div class="log-info">
-            <div class="log-subject">${sub?escapeHtml(sub.name):"General Study"}</div>
-            <div class="log-notes">${s.notes?escapeHtml(s.notes):""}</div>
-          </div>
-          <div class="log-right">
-            <div class="log-mins">${s.mins} min</div>
-            <div class="log-date">${s.date}</div>
-          </div>
-        </div>`;
-      }).join("");
+function renderLogPanel(){
+  const d=getTrackerData();
+  const sessions=[...(d.sessions||[])].reverse().slice(0,30);
+  const subMap={};(d.subjects||[]).forEach(s=>subMap[s.id]=s);
+  const logHTML=sessions.length===0
+    ?`<div class="tracker-empty">No sessions logged yet. Use the timer in Overview!</div>`
+    :sessions.map(s=>{
+      const sub=s.subjectId?subMap[s.subjectId]:null;
+      return`<div class="log-entry">
+        <div class="log-dot" style="background:${sub?sub.color:"var(--border2)"}"></div>
+        <div class="log-info">
+          <div class="log-subject">${sub?escapeHtml(sub.name):"General Study"}</div>
+          <div class="log-notes">${s.notes?escapeHtml(s.notes):""}</div>
+        </div>
+        <div class="log-right">
+          <div class="log-mins">${s.mins} min</div>
+          <div class="log-date">${s.date}</div>
+        </div>
+      </div>`;
+    }).join("");
 
   document.getElementById("tpanel-log").innerHTML=`
     <div class="log-list">${logHTML}</div>
@@ -883,19 +883,17 @@ function renderLogPanel() {
     <div class="add-subject-form" style="margin-top:6px">
       <input id="manualNotes" class="field-input" type="text" placeholder="Notes (optional)" style="flex:1"/>
       <button class="tracker-add-btn" onclick="manualLog()">Log</button>
-    </div>
-  `;
+    </div>`;
 }
-function manualLog() {
+function manualLog(){
   const mins=parseInt(document.getElementById("manualMins").value)||0;
   if(mins<1){alert("Enter at least 1 minute.");return;}
   const subId=document.getElementById("manualSubSel").value||null;
   const notes=document.getElementById("manualNotes").value.trim();
-  logStudySession(subId,mins,notes);
-  renderLogPanel();
+  logStudySession(subId,mins,notes);renderLogPanel();
 }
 
-// ─── UTILS ──────────────────────────────
+// Utils
 function escapeHtml(s){
   if(typeof s!=="string")return"";
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
