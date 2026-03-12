@@ -220,7 +220,7 @@
 <div class="app">
   <div class="main">
     <header class="chat-header">
-      <button class="history-toggle" onclick="toggleSidebar()">☰</button>
+      <button class="history-toggle" onclick="toggleSidebar()" title="Sessions">☰</button>
       <div class="header-center">
         <div class="header-brand">
           <div class="brand-icon">📚</div>
@@ -230,12 +230,12 @@
         <div class="header-subtitle" id="chatLabel">new session</div>
       </div>
       <div class="header-actions">
-        <button class="hdr-btn tracker-btn" onclick="openTracker()">📊 <span>Tracker</span></button>
-        <button class="hdr-btn flash-btn" onclick="openModal('flashModal')">⚡ <span>Flashcards</span></button>
-        <button class="hdr-btn mock-btn" onclick="openModal('mockModal')">⏱️ <span>Mock Test</span></button>
-        <button class="hdr-btn quiz-btn" onclick="openModal('quizModal')">📝 <span>Quiz</span></button>
-        <button class="hdr-btn" onclick="exportChat()">↓ <span>Export</span></button>
-        <button class="hdr-btn danger" onclick="clearCurrentChat()">✕ <span>Clear</span></button>
+        <button class="hdr-btn tracker-btn" onclick="openTracker()"        data-tip="Tracker">📊</button>
+        <button class="hdr-btn flash-btn"   onclick="openModal('flashModal')" data-tip="Flashcards">⚡</button>
+        <button class="hdr-btn mock-btn"    onclick="openModal('mockModal')"  data-tip="Mock Test">⏱️</button>
+        <button class="hdr-btn quiz-btn"    onclick="openModal('quizModal')"  data-tip="Quiz">📝</button>
+        <button class="hdr-btn"             onclick="exportChat()"            data-tip="Export">↓</button>
+        <button class="hdr-btn danger"      onclick="clearCurrentChat()"      data-tip="Clear">✕</button>
       </div>
     </header>
     <div class="chat-box" id="chatBox"></div>
