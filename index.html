@@ -94,6 +94,40 @@
   </div>
 </div>
 
+<!-- ═══ FLASHCARD BLITZ MODAL ═══ -->
+<div class="modal-bg" id="flashModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-head-title">⚡ Flashcard Blitz Setup</div>
+      <button class="modal-x" onclick="closeModal('flashModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-label">Topic</div>
+      <input id="flashTopic" class="field-input" type="text" placeholder="e.g. Periodic Table, French Revolution, Calculus…"/>
+      <div class="field-label">Number of cards</div>
+      <div class="pill-row">
+        <div class="pill flash on" id="fnum-5"  onclick="setPill('fnum',5)">5</div>
+        <div class="pill flash"    id="fnum-8"  onclick="setPill('fnum',8)">8</div>
+        <div class="pill flash"    id="fnum-12" onclick="setPill('fnum',12)">12</div>
+        <div class="pill flash"    id="fnum-15" onclick="setPill('fnum',15)">15</div>
+      </div>
+      <div class="field-label">Mode</div>
+      <div class="pill-row">
+        <div class="pill flash on" id="fmode-classic"  onclick="setPill('fmode','classic')">Classic Flip</div>
+        <div class="pill flash"    id="fmode-speed"    onclick="setPill('fmode','speed')">Speed Round ⚡</div>
+        <div class="pill flash"    id="fmode-survival" onclick="setPill('fmode','survival')">Survival 💀</div>
+      </div>
+      <div class="field-label">Difficulty</div>
+      <div class="pill-row">
+        <div class="pill flash"    id="fdiff-easy"   onclick="setPill('fdiff','easy')">Easy</div>
+        <div class="pill flash on" id="fdiff-medium" onclick="setPill('fdiff','medium')">Medium</div>
+        <div class="pill flash"    id="fdiff-hard"   onclick="setPill('fdiff','hard')">Hard</div>
+      </div>
+      <button class="modal-primary-btn btn-flash" onclick="startFlashBlitz()">Launch Flashcard Blitz ⚡</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ STUDY TRACKER MODAL ═══ -->
 <div class="modal-bg" id="trackerModal">
   <div class="modal-box tracker-modal-box">
@@ -101,7 +135,6 @@
       <div class="modal-head-title">📊 Study Tracker</div>
       <button class="modal-x" onclick="closeModal('trackerModal')">✕</button>
     </div>
-    <!-- Tab bar -->
     <div class="tracker-tabs">
       <button class="tracker-tab active" id="ttab-overview" onclick="switchTrackerTab('overview')">Overview</button>
       <button class="tracker-tab" id="ttab-subjects" onclick="switchTrackerTab('subjects')">Subjects</button>
@@ -138,6 +171,51 @@
   <div class="results-body" id="resultsBody"></div>
 </div>
 
+<!-- ═══ FLASHCARD BLITZ SCREEN ═══ -->
+<div class="flash-screen" id="flashScreen">
+  <div class="flash-header">
+    <div class="flash-title" id="flashScreenTitle">⚡ Flashcard Blitz</div>
+    <div class="flash-header-right">
+      <div class="flash-score-display" id="flashScoreDisplay">0 ✓ · 0 ✗</div>
+      <div class="flash-timer-display" id="flashTimerDisplay" style="display:none">0s</div>
+      <div class="flash-lives" id="flashLives" style="display:none">❤️❤️❤️</div>
+      <button class="flash-exit-btn" onclick="exitFlash()">✕ Exit</button>
+    </div>
+  </div>
+  <div class="flash-prog-bar"><div class="flash-prog-fill" id="flashProgFill"></div></div>
+  <div class="flash-body" id="flashBody">
+    <div class="flash-card-area">
+      <div class="flash-counter" id="flashCounter">Card 1 of 5</div>
+      <div class="flash-card-wrap" id="flashCardWrap" onclick="flipCard()">
+        <div class="flash-card" id="flashCard">
+          <div class="flash-card-front" id="flashFront"></div>
+          <div class="flash-card-back" id="flashBack"></div>
+        </div>
+      </div>
+      <div class="flash-hint" id="flashHint">Tap the card to reveal the answer</div>
+      <div class="flash-actions" id="flashActions" style="display:none">
+        <button class="flash-btn flash-btn-wrong" onclick="rateCard(false)">✗ Didn't know</button>
+        <button class="flash-btn flash-btn-correct" onclick="rateCard(true)">✓ Got it!</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FLASH RESULTS SCREEN ═══ -->
+<div class="flash-results-screen" id="flashResultsScreen">
+  <div class="flash-results-inner">
+    <div class="flash-results-icon" id="flashResultsIcon">⚡</div>
+    <div class="flash-results-title" id="flashResultsTitle">Blitz Complete!</div>
+    <div class="flash-results-score" id="flashResultsScore"></div>
+    <div class="flash-results-stats" id="flashResultsStats"></div>
+    <div class="flash-results-review" id="flashResultsReview"></div>
+    <div class="flash-results-btns">
+      <button class="flash-results-btn flash-results-btn-retry" onclick="retryFlash()">🔄 Retry</button>
+      <button class="flash-results-btn flash-results-btn-back" onclick="exitFlashResults()">← Back to Study</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MAIN APP ═══ -->
 <div class="app">
   <div class="main">
@@ -153,6 +231,7 @@
       </div>
       <div class="header-actions">
         <button class="hdr-btn tracker-btn" onclick="openTracker()">📊 <span>Tracker</span></button>
+        <button class="hdr-btn flash-btn" onclick="openModal('flashModal')">⚡ <span>Flashcards</span></button>
         <button class="hdr-btn mock-btn" onclick="openModal('mockModal')">⏱️ <span>Mock Test</span></button>
         <button class="hdr-btn quiz-btn" onclick="openModal('quizModal')">📝 <span>Quiz</span></button>
         <button class="hdr-btn" onclick="exportChat()">↓ <span>Export</span></button>
@@ -166,11 +245,11 @@
         <button class="send-btn" id="sendBtn" onclick="askAI()">Send</button>
       </div>
       <div class="input-hints">
-        <span class="hint-chip" onclick="sendHint('Explain miosis simply')">🌱 Explain</span>
-        <span class="hint-chip" onclick="sendHint('Quiz me on World War II')">📝 Quiz me</span>
-        <span class="hint-chip" onclick="sendHint('Help me solve: 2x + 5 = 13 step by step')">🔢 Solve</span>
-        <span class="hint-chip" onclick="sendHint('Real-world example of Newtons 3rd law')">💡 Example</span>
-        <span class="hint-chip" onclick="sendHint('Summarize the causes of World War I')">📜 Summarize</span>
+        <span class="hint-chip" onclick="fillInput('Explain miosis simply')">🌱 Explain</span>
+        <span class="hint-chip" onclick="fillInput('Quiz me on World War II')">📝 Quiz me</span>
+        <span class="hint-chip" onclick="fillInput('Help me solve: 2x + 5 = 13 step by step')">🔢 Solve</span>
+        <span class="hint-chip" onclick="fillInput('Real-world example of Newtons 3rd law')">💡 Example</span>
+        <span class="hint-chip" onclick="fillInput('Summarize the causes of World War I')">📜 Summarize</span>
       </div>
     </div>
   </div>
