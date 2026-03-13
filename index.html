@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Apex Study AI</title>
+<title>Apex Mind AI</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,700;1,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -25,30 +25,36 @@
   <div class="history-list" id="historyList"></div>
 </aside>
 
-<!-- ═══ QUIZ MODAL ═══ -->
-<div class="modal-bg" id="quizModal">
+<!-- ═══ NOTES MODAL ═══ -->
+<div class="modal-bg" id="notesModal">
   <div class="modal-box">
     <div class="modal-head">
-      <div class="modal-head-title">📝 Quick Quiz Generator</div>
-      <button class="modal-x" onclick="closeModal('quizModal')">✕</button>
+      <div class="modal-head-title">📒 Note Generator</div>
+      <button class="modal-x" onclick="closeModal('notesModal')">✕</button>
     </div>
     <div class="modal-body">
       <div class="field-label">Topic</div>
-      <input id="quizTopic" class="field-input" type="text" placeholder="e.g. Photosynthesis, World War II, Algebra…"/>
-      <div class="field-label">Quiz type</div>
+      <input id="notesTopic" class="field-input" type="text" placeholder="e.g. Photosynthesis, French Revolution, Algebra…"/>
+      <div class="field-label">Note length</div>
       <div class="pill-row">
-        <div class="pill on"  id="qtype-mixed"     onclick="setPill('qtype','mixed')">Mixed</div>
-        <div class="pill"     id="qtype-mcq"       onclick="setPill('qtype','mcq')">MCQ Only</div>
-        <div class="pill"     id="qtype-short"     onclick="setPill('qtype','short')">Short Answer</div>
-        <div class="pill"     id="qtype-truefalse" onclick="setPill('qtype','truefalse')">True / False</div>
+        <div class="pill notes on" id="nlen-short"  onclick="setPill('nlen','short')">Short &amp; Concise</div>
+        <div class="pill notes"    id="nlen-long"   onclick="setPill('nlen','long')">Long &amp; Detailed</div>
       </div>
-      <div class="field-label">Number of questions</div>
-      <div class="pill-row">
-        <div class="pill on" id="qnum-3"  onclick="setPill('qnum',3)">3</div>
-        <div class="pill"    id="qnum-5"  onclick="setPill('qnum',5)">5</div>
-        <div class="pill"    id="qnum-10" onclick="setPill('qnum',10)">10</div>
+      <div class="field-label">Language</div>
+      <div class="pill-row" id="notesLangRow">
+        <div class="pill notes on" id="nlang-English"  onclick="setPill('nlang','English')">English</div>
+        <div class="pill notes"    id="nlang-Hindi"    onclick="setPill('nlang','Hindi')">Hindi</div>
+        <div class="pill notes"    id="nlang-Spanish"  onclick="setPill('nlang','Spanish')">Spanish</div>
+        <div class="pill notes"    id="nlang-French"   onclick="setPill('nlang','French')">French</div>
+        <div class="pill notes"    id="nlang-German"   onclick="setPill('nlang','German')">German</div>
+        <div class="pill notes"    id="nlang-Arabic"   onclick="setPill('nlang','Arabic')">Arabic</div>
+        <div class="pill notes"    id="nlang-Bengali"  onclick="setPill('nlang','Bengali')">Bengali</div>
+        <div class="pill notes"    id="nlang-Other"    onclick="setCustomLang()">Other…</div>
       </div>
-      <button class="modal-primary-btn btn-blue" onclick="startQuiz()">Generate Quiz →</button>
+      <div id="customLangWrap" style="display:none">
+        <input id="customLangInput" class="field-input" type="text" placeholder="Type your language (e.g. Japanese, Swahili…)" style="margin-top:4px"/>
+      </div>
+      <button class="modal-primary-btn btn-notes" onclick="startNotes()">Generate Notes 📒</button>
     </div>
   </div>
 </div>
@@ -230,10 +236,10 @@
         <div class="header-subtitle" id="chatLabel">new session</div>
       </div>
       <div class="header-actions">
-        <button class="hdr-btn tracker-btn" onclick="openTracker()"        data-tip="Tracker">📊</button>
+        <button class="hdr-btn tracker-btn" onclick="openTracker()"           data-tip="Tracker">📊</button>
         <button class="hdr-btn flash-btn"   onclick="openModal('flashModal')" data-tip="Flashcards">⚡</button>
         <button class="hdr-btn mock-btn"    onclick="openModal('mockModal')"  data-tip="Mock Test">⏱️</button>
-        <button class="hdr-btn quiz-btn"    onclick="openModal('quizModal')"  data-tip="Quiz">📝</button>
+        <button class="hdr-btn notes-btn"   onclick="openModal('notesModal')" data-tip="Notes">📒</button>
         <button class="hdr-btn"             onclick="exportChat()"            data-tip="Export">↓</button>
         <button class="hdr-btn danger"      onclick="clearCurrentChat()"      data-tip="Clear">✕</button>
       </div>
