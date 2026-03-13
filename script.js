@@ -3,7 +3,7 @@ const OR_APP_TITLE = "Apex Study AI";
 const OR_HTTP_REFERER = (typeof window !== "undefined" && window.location && window.location.origin)
   ? window.location.origin : "https://localhost";
 
-const MODELS = ["openai/gpt-oss-120b:free"];
+const MODELS = ["openai/gpt-oss-20b:free"];
 
 const SYSTEM_PROMPT = `You are Apex Study AI, an intelligent study coach designed to help students learn deeply, not just get answers.
 
