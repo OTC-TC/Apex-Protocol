@@ -1,5 +1,5 @@
 const API_KEY_DEFAULT = "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";
-const OR_APP_TITLE = "Apex Study AI";
+const OR_APP_TITLE = "Apex Mind AI";
 const OR_HTTP_REFERER = (typeof window !== "undefined" && window.location && window.location.origin)
   ? window.location.origin : "https://localhost";
 
@@ -28,7 +28,7 @@ const SK_SESSIONS="apexStudy_sessions",SK_ACTIVE="apexStudy_activeId",SK_MSG="ap
 const SK_TRACKER="apexStudy_tracker";
 const SK_API_KEY="apexStudy_apiKey";
 let activeSessionId=null,chatHistory=[],studyProgress=0,isLoading=false;
-let pillState={qtype:"mixed",qnum:3,mnum:5,mtype:"mcq",mtime:10,mdiff:"medium",fnum:5,fmode:"classic",fdiff:"medium"};
+let pillState={nlen:"short",nlang:"English",mnum:5,mtype:"mcq",mtime:10,mdiff:"medium",fnum:5,fmode:"classic",fdiff:"medium"};
 let mockQuestions=[],mockAnswers={},mockCorrectAnswers={},mockExplanations={};
 let mockTimerInt=null,mockSecsLeft=0;
 const MAX_CHAT_MESSAGES=20;
@@ -53,7 +53,7 @@ function trimMessages(messages,max){
 let trackerData=null,studyTimerInt=null,studyTimerSecs=0,studyTimerRunning=false;
 function getTrackerData(){try{return JSON.parse(localStorage.getItem(SK_TRACKER))||createDefaultTracker();}catch{return createDefaultTracker();}}
 function saveTrackerData(d){localStorage.setItem(SK_TRACKER,JSON.stringify(d));}
-function createDefaultTracker(){return{subjects:[],goals:[],sessions:[],quizzesTaken:0,mockTestsTaken:0,flashcardsTaken:0,totalMsgs:0,streakDays:[],createdAt:Date.now()};}
+function createDefaultTracker(){return{subjects:[],goals:[],sessions:[],quizzesTaken:0,mockTestsTaken:0,flashcardsTaken:0,notesTaken:0,totalMsgs:0,streakDays:[],createdAt:Date.now()};}
 function ensureToday(){const d=getTrackerData(),today=todayStr();if(!d.streakDays.includes(today)){d.streakDays.push(today);saveTrackerData(d);}}
 function todayStr(){return new Date().toISOString().slice(0,10);}
 function getStreak(){
@@ -66,9 +66,9 @@ function getStreak(){
 function getTodayMins(){const d=getTrackerData(),today=todayStr();return d.sessions.filter(s=>s.date===today).reduce((a,s)=>a+(s.mins||0),0);}
 function getWeekMins(){const d=getTrackerData(),now=new Date();const weekAgo=new Date(now-7*86400000).toISOString().slice(0,10);return d.sessions.filter(s=>s.date>=weekAgo).reduce((a,s)=>a+(s.mins||0),0);}
 function logStudySession(subjectId,mins,notes){const d=getTrackerData();d.sessions.push({date:todayStr(),subjectId,mins,notes:notes||""});if(subjectId!=null){const sub=d.subjects.find(s=>s.id===subjectId);if(sub)sub.totalMins=(sub.totalMins||0)+mins;}saveTrackerData(d);ensureToday();}
-function trackQuiz(){const d=getTrackerData();d.quizzesTaken=(d.quizzesTaken||0)+1;saveTrackerData(d);ensureToday();}
 function trackMock(){const d=getTrackerData();d.mockTestsTaken=(d.mockTestsTaken||0)+1;saveTrackerData(d);ensureToday();}
 function trackFlash(){const d=getTrackerData();d.flashcardsTaken=(d.flashcardsTaken||0)+1;saveTrackerData(d);ensureToday();}
+function trackNotes(){const d=getTrackerData();d.notesTaken=(d.notesTaken||0)+1;saveTrackerData(d);ensureToday();}
 function trackMsg(){const d=getTrackerData();d.totalMsgs=(d.totalMsgs||0)+1;saveTrackerData(d);ensureToday();}
 
 function setPill(group,val){
@@ -120,10 +120,10 @@ window.onload=function(){
   else if(sessions.length)loadSession(sessions[0].id);
   else{const s=createSession("New Session");loadSession(s.id);}
   document.getElementById("userInput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();askAI();}});
-  document.getElementById("quizTopic").addEventListener("keydown",e=>{if(e.key==="Enter")startQuiz();});
+  document.getElementById("notesTopic").addEventListener("keydown",e=>{if(e.key==="Enter")startNotes();});
   document.getElementById("mockTopic").addEventListener("keydown",e=>{if(e.key==="Enter")startMockTest();});
   document.getElementById("flashTopic").addEventListener("keydown",e=>{if(e.key==="Enter")startFlashBlitz();});
-  ["quizModal","mockModal","trackerModal","flashModal"].forEach(id=>{
+  ["notesModal","mockModal","trackerModal","flashModal"].forEach(id=>{
     document.getElementById(id).addEventListener("click",function(e){if(e.target===this)closeModal(id);});
   });
   document.getElementById("userInput").focus();
@@ -284,15 +284,11 @@ async function callOpenRouter(payload,modelIndex,attempt){
   return data;
 }
 
-// ── FILL INPUT (chips just fill, don't send) ──
+// ── FILL INPUT ──
 function fillInput(text){
   const inp=document.getElementById("userInput");
-  inp.value=text;
-  inp.focus();
-  inp.setSelectionRange(text.length,text.length);
+  inp.value=text;inp.focus();inp.setSelectionRange(text.length,text.length);
 }
-
-// Keep sendHint for backwards compat (actually sends)
 function sendHint(text){fillInput(text);}
 
 async function askAI(){
@@ -325,13 +321,42 @@ function exportChat(){
   a.href=URL.createObjectURL(blob);a.download="apex-study-session.txt";a.click();
 }
 
-function startQuiz(){
-  const topic=document.getElementById("quizTopic").value.trim();
-  if(!topic){document.getElementById("quizTopic").focus();return;}
-  const tl={mixed:"mixed (MCQ and short answer)",mcq:"multiple choice",short:"short answer",truefalse:"true/false"}[pillState.qtype];
-  const prompt=`Please generate a ${pillState.qnum}-question ${tl} quiz on: "${topic}". Number each question clearly (Q1, Q2...). For MCQ provide 4 options labeled A-D. Don't give the answers yet - wait for my responses.`;
-  closeModal("quizModal");document.getElementById("quizTopic").value="";
-  document.getElementById("userInput").value=prompt;trackQuiz();askAI();
+// ══════════════════════════════════════
+//  NOTES GENERATOR
+// ══════════════════════════════════════
+function setCustomLang(){
+  // Toggle "Other…" selected state and show/hide the custom input
+  document.querySelectorAll('[id^="nlang-"]').forEach(e=>e.classList.remove("on"));
+  document.getElementById("nlang-Other").classList.add("on");
+  const wrap=document.getElementById("customLangWrap");
+  wrap.style.display="block";
+  document.getElementById("customLangInput").focus();
+}
+
+function startNotes(){
+  const topic=document.getElementById("notesTopic").value.trim();
+  if(!topic){document.getElementById("notesTopic").focus();return;}
+
+  // Determine language
+  let lang=pillState.nlang;
+  if(lang==="Other"||!lang){
+    const custom=(document.getElementById("customLangInput").value||"").trim();
+    lang=custom||"English";
+  }
+
+  const length=pillState.nlen==="long"?"long and detailed":"short and concise";
+  const prompt=`Please generate ${length} study notes on the topic: "${topic}". Write the notes in ${lang}. Use clear headings, bullet points, key terms highlighted, and end with a quick summary box. Make the notes easy to revise from.`;
+
+  closeModal("notesModal");
+  document.getElementById("notesTopic").value="";
+  document.getElementById("customLangInput").value="";
+  document.getElementById("customLangWrap").style.display="none";
+  // Reset lang pill to English
+  setPill("nlang","English");
+
+  document.getElementById("userInput").value=prompt;
+  trackNotes();
+  askAI();
 }
 
 // ══════════════════════════════════════
@@ -432,24 +457,11 @@ async function startFlashBlitz(){
   document.getElementById("flashScreen").classList.add("active");
   document.getElementById("flashScreenTitle").textContent="⚡ "+topic;
   document.getElementById("flashBody").innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px 20px"><div style="width:46px;height:46px;border:3px solid rgba(192,132,252,0.2);border-top-color:#c084fc;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--ink-muted)">Generating ${fnum} flashcards on <strong style="color:var(--flash)">${escapeHtml(topic)}</strong>…</div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
-
-  // Mode-specific UI setup
   document.getElementById("flashTimerDisplay").style.display="none";
   document.getElementById("flashLives").style.display="none";
   if(fmode==="speed"){document.getElementById("flashTimerDisplay").style.display="block";}
   if(fmode==="survival"){document.getElementById("flashLives").style.display="block";flashLivesLeft=3;updateLivesDisplay();}
-
-  const prompt=`Generate exactly ${fnum} flashcards on the topic: "${topic}" at ${fdiff} difficulty level.
-YOU MUST respond with ONLY a valid JSON array. No text before or after. No markdown. No explanation.
-Each flashcard has a "front" (a question or term) and "back" (the answer or definition).
-Format:
-[
-  {"num":1,"front":"What is photosynthesis?","back":"The process by which plants convert sunlight, water, and CO2 into glucose and oxygen."},
-  {"num":2,"front":"Symbol for Sodium?","back":"Na (from Natrium)"}
-]
-Make the fronts concise questions or terms. Backs should be clear, 1-3 sentence answers.
-Generate exactly ${fnum} cards. Topic: ${topic}. Output ONLY the JSON array.`;
-
+  const prompt=`Generate exactly ${fnum} flashcards on the topic: "${topic}" at ${fdiff} difficulty level. YOU MUST respond with ONLY a valid JSON array. No text before or after. No markdown. No explanation. Each flashcard has a "front" (a question or term) and "back" (the answer or definition). Format: [{"num":1,"front":"What is photosynthesis?","back":"The process by which plants convert sunlight, water, and CO2 into glucose and oxygen."},{"num":2,"front":"Symbol for Sodium?","back":"Na (from Natrium)"}] Make the fronts concise questions or terms. Backs should be clear, 1-3 sentence answers. Generate exactly ${fnum} cards. Topic: ${topic}. Output ONLY the JSON array.`;
   try{
     const data=await callOpenRouter({temperature:0.4,messages:[{role:"system",content:"You are a JSON generator. Output only valid JSON arrays with no extra text, no markdown, no explanation."},{role:"user",content:prompt}]});
     let raw=(data&&data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";
@@ -458,26 +470,14 @@ Generate exactly ${fnum} cards. Topic: ${topic}. Output ONLY the JSON array.`;
     if(si!==-1&&ei!==-1)raw=raw.slice(si,ei+1);
     flashCards=JSON.parse(raw);
     if(!Array.isArray(flashCards)||flashCards.length===0)throw new Error("Empty array");
-  }catch(err){
-    document.getElementById("flashScreen").classList.remove("active");
-    addMessage(formatApiError(err),"bot");console.error(err);return;
-  }
-
+  }catch(err){document.getElementById("flashScreen").classList.remove("active");addMessage(formatApiError(err),"bot");console.error(err);return;}
   flashIdx=0;flashCorrect=0;flashWrong=0;flashResults=[];flashIsFlipped=false;flashTimerSecs=0;
-  trackFlash();
-  restoreFlashBody();
-  renderFlashCard();
-
+  trackFlash();restoreFlashBody();renderFlashCard();
   if(fmode==="speed"){
     clearInterval(flashTimerInt);
-    flashTimerInt=setInterval(()=>{
-      flashTimerSecs++;
-      const el=document.getElementById("flashTimerDisplay");
-      if(el)el.textContent=flashTimerSecs+"s";
-    },1000);
+    flashTimerInt=setInterval(()=>{flashTimerSecs++;const el=document.getElementById("flashTimerDisplay");if(el)el.textContent=flashTimerSecs+"s";},1000);
   }
 }
-
 function restoreFlashBody(){
   document.getElementById("flashBody").innerHTML=`
     <div class="flash-card-area">
@@ -495,141 +495,80 @@ function restoreFlashBody(){
       </div>
     </div>`;
 }
-
 function renderFlashCard(){
   if(flashIdx>=flashCards.length){endFlash();return;}
-  const card=flashCards[flashIdx];
-  const total=flashCards.length;
+  const card=flashCards[flashIdx];const total=flashCards.length;
   document.getElementById("flashCounter").textContent=`Card ${flashIdx+1} of ${total}`;
   document.getElementById("flashProgFill").style.width=Math.round((flashIdx/total)*100)+"%";
   document.getElementById("flashScoreDisplay").textContent=`${flashCorrect} ✓ · ${flashWrong} ✗`;
-
-  // Reset flip state
   flashIsFlipped=false;
-  const cardEl=document.getElementById("flashCard");
-  if(cardEl)cardEl.classList.remove("flipped");
+  const cardEl=document.getElementById("flashCard");if(cardEl)cardEl.classList.remove("flipped");
   document.getElementById("flashActions").style.display="none";
   document.getElementById("flashHint").textContent="Tap the card to reveal the answer";
-
-  document.getElementById("flashFront").innerHTML=`
-    <div class="flash-card-front-label">Question</div>
-    <div class="flash-question-text">${escapeHtml(card.front)}</div>
-    <div class="flash-tap-ring">👆</div>`;
-  document.getElementById("flashBack").innerHTML=`
-    <div class="flash-card-back-label">Answer</div>
-    <div class="flash-answer-text">${escapeHtml(card.back)}</div>`;
+  document.getElementById("flashFront").innerHTML=`<div class="flash-card-front-label">Question</div><div class="flash-question-text">${escapeHtml(card.front)}</div><div class="flash-tap-ring">👆</div>`;
+  document.getElementById("flashBack").innerHTML=`<div class="flash-card-back-label">Answer</div><div class="flash-answer-text">${escapeHtml(card.back)}</div>`;
 }
-
 function flipCard(){
-  if(flashIsFlipped)return; // already flipped, wait for rating
-  flashIsFlipped=true;
-  const cardEl=document.getElementById("flashCard");
-  if(cardEl)cardEl.classList.add("flipped");
+  if(flashIsFlipped)return;flashIsFlipped=true;
+  const cardEl=document.getElementById("flashCard");if(cardEl)cardEl.classList.add("flipped");
   document.getElementById("flashHint").textContent="How did you do?";
   document.getElementById("flashActions").style.display="flex";
 }
-
 function rateCard(correct){
-  const card=flashCards[flashIdx];
-  flashResults.push({card,correct});
-  if(correct){flashCorrect++;}
-  else{
+  const card=flashCards[flashIdx];flashResults.push({card,correct});
+  if(correct){flashCorrect++;}else{
     flashWrong++;
     if(flashMode==="survival"){
-      flashLivesLeft--;
-      updateLivesDisplay();
-      // Shake animation
+      flashLivesLeft--;updateLivesDisplay();
       const wrap=document.getElementById("flashCardWrap");
       if(wrap){wrap.classList.add("shake");setTimeout(()=>wrap.classList.remove("shake"),400);}
       if(flashLivesLeft<=0){setTimeout(()=>endFlash(),450);return;}
     }
   }
-  // Slide to next
   const wrap=document.getElementById("flashCardWrap");
   if(wrap&&flashMode==="speed"){
     wrap.classList.add(correct?"slide-out-right":"slide-out-left");
-    setTimeout(()=>{
-      wrap.classList.remove("slide-out-right","slide-out-left");
-      flashIdx++;
-      renderFlashCard();
-      wrap.classList.add("slide-in");
-      setTimeout(()=>wrap.classList.remove("slide-in"),300);
-    },280);
-  }else{
-    flashIdx++;
-    renderFlashCard();
-  }
+    setTimeout(()=>{wrap.classList.remove("slide-out-right","slide-out-left");flashIdx++;renderFlashCard();wrap.classList.add("slide-in");setTimeout(()=>wrap.classList.remove("slide-in"),300);},280);
+  }else{flashIdx++;renderFlashCard();}
 }
-
 function updateLivesDisplay(){
-  const el=document.getElementById("flashLives");
-  if(!el)return;
-  const full="❤️",empty="🖤";
-  el.textContent=full.repeat(Math.max(0,flashLivesLeft))+empty.repeat(Math.max(0,3-flashLivesLeft));
+  const el=document.getElementById("flashLives");if(!el)return;
+  el.textContent="❤️".repeat(Math.max(0,flashLivesLeft))+"🖤".repeat(Math.max(0,3-flashLivesLeft));
 }
-
 function endFlash(){
-  clearInterval(flashTimerInt);
-  document.getElementById("flashScreen").classList.remove("active");
-  const total=flashCards.length;
-  const done=flashResults.length;
-  const pct=done>0?Math.round((flashCorrect/done)*100):0;
+  clearInterval(flashTimerInt);document.getElementById("flashScreen").classList.remove("active");
+  const total=flashCards.length,done=flashResults.length;const pct=done>0?Math.round((flashCorrect/done)*100):0;
   const icon=pct>=80?"🔥":pct>=60?"⚡":pct>=40?"📚":"🌱";
   const title=pct>=80?"Blazing run! 🔥":pct>=60?"Great recall! ⚡":pct>=40?"Good progress! 📚":"Keep practising! 🌱";
-
   document.getElementById("flashResultsIcon").textContent=icon;
   document.getElementById("flashResultsTitle").textContent=title;
   document.getElementById("flashResultsScore").textContent=pct+"%";
-
   let statsHTML=`<div class="stat-pill correct">✓ ${flashCorrect} known</div><div class="stat-pill wrong">✗ ${flashWrong} missed</div><div class="stat-pill skip">${done} of ${total} cards</div>`;
   if(flashMode==="speed")statsHTML+=`<div class="stat-pill review">⏱️ ${flashTimerSecs}s</div>`;
   document.getElementById("flashResultsStats").innerHTML=statsHTML;
-
-  // Review missed cards
   const missed=flashResults.filter(r=>!r.correct);
   if(missed.length>0){
     let reviewHTML=`<div class="flash-review-header">Cards to review (${missed.length})</div>`;
     reviewHTML+=missed.map(r=>`<div class="flash-review-item"><div class="flash-review-badge w">✗</div><div><div class="flash-review-q">${escapeHtml(r.card.front)}</div><div class="flash-review-a">${escapeHtml(r.card.back)}</div></div></div>`).join("");
     document.getElementById("flashResultsReview").innerHTML=reviewHTML;
-  }else{
-    document.getElementById("flashResultsReview").innerHTML=`<div class="flash-review-header">Perfect round! No cards to review ✨</div>`;
-  }
-
+  }else{document.getElementById("flashResultsReview").innerHTML=`<div class="flash-review-header">Perfect round! No cards to review ✨</div>`;}
   document.getElementById("flashResultsScreen").classList.add("active");
 }
-
 function retryFlash(){
   document.getElementById("flashResultsScreen").classList.remove("active");
-  // Reshuffle and restart with same cards
   flashCards.sort(()=>Math.random()-0.5);
   flashIdx=0;flashCorrect=0;flashWrong=0;flashResults=[];flashIsFlipped=false;flashTimerSecs=0;flashLivesLeft=3;
-  document.getElementById("flashTimerDisplay").textContent="0s";
-  updateLivesDisplay();
-  document.getElementById("flashScreen").classList.add("active");
-  restoreFlashBody();
-  renderFlashCard();
-  if(flashMode==="speed"){
-    clearInterval(flashTimerInt);
-    flashTimerInt=setInterval(()=>{
-      flashTimerSecs++;
-      const el=document.getElementById("flashTimerDisplay");
-      if(el)el.textContent=flashTimerSecs+"s";
-    },1000);
-  }
+  document.getElementById("flashTimerDisplay").textContent="0s";updateLivesDisplay();
+  document.getElementById("flashScreen").classList.add("active");restoreFlashBody();renderFlashCard();
+  if(flashMode==="speed"){clearInterval(flashTimerInt);flashTimerInt=setInterval(()=>{flashTimerSecs++;const el=document.getElementById("flashTimerDisplay");if(el)el.textContent=flashTimerSecs+"s";},1000);}
 }
-
-function exitFlash(){
-  clearInterval(flashTimerInt);
-  document.getElementById("flashScreen").classList.remove("active");
-}
-function exitFlashResults(){
-  document.getElementById("flashResultsScreen").classList.remove("active");
-}
+function exitFlash(){clearInterval(flashTimerInt);document.getElementById("flashScreen").classList.remove("active");}
+function exitFlashResults(){document.getElementById("flashResultsScreen").classList.remove("active");}
 
 // ══════════════════════════════════════
 //  STUDY TRACKER
 // ══════════════════════════════════════
-function openTracker(){closeModal("quizModal");closeModal("mockModal");renderTrackerOverview();openModal("trackerModal");}
+function openTracker(){closeModal("notesModal");closeModal("mockModal");renderTrackerOverview();openModal("trackerModal");}
 let trackerTab="overview";
 function switchTrackerTab(tab){
   trackerTab=tab;
@@ -647,15 +586,14 @@ function renderTrackerOverview(){
   const streak=getStreak(),todayMins=getTodayMins(),weekMins=getWeekMins();
   const days=[];
   for(let i=6;i>=0;i--){const dt=new Date();dt.setDate(dt.getDate()-i);const str=dt.toISOString().slice(0,10);const dayMins=d.sessions.filter(s=>s.date===str).reduce((a,s)=>a+(s.mins||0),0);days.push({label:dt.toLocaleDateString(undefined,{weekday:"short"}),mins:dayMins,date:str});}
-  const maxMins=Math.max(...days.map(x=>x.mins),1);
-  const todayFmt=todayStr();
+  const maxMins=Math.max(...days.map(x=>x.mins),1);const todayFmt=todayStr();
   const chartBars=days.map(day=>{const h=Math.max(4,Math.round((day.mins/maxMins)*80));const isToday=day.date===todayFmt;return `<div class="chart-col"><div class="chart-bar-wrap"><div class="chart-bar ${isToday?"today":""}" style="height:${h}px" title="${day.mins} min"></div></div><div class="chart-day ${isToday?"chart-day-today":""}">${day.label}</div></div>`;}).join("");
   document.getElementById("tpanel-overview").innerHTML=`
     <div class="tracker-stats-grid">
       <div class="t-stat-card streak"><div class="t-stat-icon">🔥</div><div class="t-stat-val">${streak}</div><div class="t-stat-label">Day Streak</div></div>
       <div class="t-stat-card"><div class="t-stat-icon">⏱️</div><div class="t-stat-val">${todayMins}</div><div class="t-stat-label">Mins Today</div></div>
       <div class="t-stat-card"><div class="t-stat-icon">📅</div><div class="t-stat-val">${weekMins}</div><div class="t-stat-label">Mins This Week</div></div>
-      <div class="t-stat-card"><div class="t-stat-icon">📝</div><div class="t-stat-val">${d.quizzesTaken||0}</div><div class="t-stat-label">Quizzes Taken</div></div>
+      <div class="t-stat-card"><div class="t-stat-icon">📒</div><div class="t-stat-val">${d.notesTaken||0}</div><div class="t-stat-label">Notes Generated</div></div>
       <div class="t-stat-card"><div class="t-stat-icon">🧪</div><div class="t-stat-val">${d.mockTestsTaken||0}</div><div class="t-stat-label">Mock Tests</div></div>
       <div class="t-stat-card"><div class="t-stat-icon">⚡</div><div class="t-stat-val">${d.flashcardsTaken||0}</div><div class="t-stat-label">Flashcard Blitzes</div></div>
     </div>
