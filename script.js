@@ -7,7 +7,7 @@ const MODELS = ["openrouter/hunter-alpha"];
 // Vision-capable model for image questions
 const VISION_MODEL = "anthropic/claude-3.5-sonnet";
 
-const SYSTEM_PROMPT = `You are Apex Study AI, an intelligent study coach designed to help students learn deeply, not just get answers.
+const SYSTEM_PROMPT = `You are Apex Mind AI, an intelligent study coach designed to help students learn deeply, not just get answers.
 
 Your goals:
 1. Teach concepts clearly and simply.
