@@ -4,6 +4,8 @@ const OR_HTTP_REFERER = (typeof window !== "undefined" && window.location && win
   ? window.location.origin : "https://localhost";
 
 const MODELS = ["openrouter/hunter-alpha"];
+// Vision-capable model for image questions
+const VISION_MODEL = "anthropic/claude-3.5-sonnet";
 
 const SYSTEM_PROMPT = `You are Apex Study AI, an intelligent study coach designed to help students learn deeply, not just get answers.
 
@@ -22,7 +24,8 @@ Behavior rules:
 5. SUPPORTIVE STUDY COACH - Be encouraging and motivating.
 6. STRUCTURED RESPONSES - Use this format when possible:
 Concept / Example / Key Points / Practice Question
-Always use markdown formatting.`;
+Always use markdown formatting.
+7. IMAGE ANALYSIS - When a student shares an image of a question, diagram, equation, or any study material, analyze it carefully and provide a thorough educational explanation.`;
 
 const SK_SESSIONS="apexStudy_sessions",SK_ACTIVE="apexStudy_activeId",SK_MSG="apexStudy_msgs_";
 const SK_TRACKER="apexStudy_tracker";
@@ -37,6 +40,9 @@ const MAX_CHAT_MESSAGES=20;
 let flashCards=[],flashIdx=0,flashCorrect=0,flashWrong=0;
 let flashResults=[],flashLivesLeft=3,flashTimerInt=null,flashTimerSecs=0;
 let flashIsFlipped=false,flashMode="classic",flashTopic="";
+
+// ── Picture Mode state ──
+let attachedImageBase64=null,attachedImageMime=null,attachedImageName=null;
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function trimMessages(messages,max){
@@ -126,6 +132,30 @@ window.onload=function(){
   ["notesModal","mockModal","trackerModal","flashModal"].forEach(id=>{
     document.getElementById(id).addEventListener("click",function(e){if(e.target===this)closeModal(id);});
   });
+
+  // Image input listener
+  const imgInput=document.getElementById("imageFileInput");
+  if(imgInput){
+    imgInput.addEventListener("change",function(e){
+      const file=e.target.files[0];
+      if(file)handleImageAttach(file);
+      imgInput.value="";
+    });
+  }
+
+  // Paste image support
+  document.addEventListener("paste",function(e){
+    const items=e.clipboardData&&e.clipboardData.items;
+    if(!items)return;
+    for(let i=0;i<items.length;i++){
+      if(items[i].type.startsWith("image/")){
+        const file=items[i].getAsFile();
+        if(file)handleImageAttach(file);
+        break;
+      }
+    }
+  });
+
   document.getElementById("userInput").focus();
 };
 
@@ -140,6 +170,7 @@ function clearCurrentChat(){
   saveMsgs(activeSessionId,chatHistory);updateLabel(activeSessionId,"New Session");
   document.getElementById("chatLabel").textContent="new session";
   studyProgress=0;document.getElementById("progressFill").style.width="0%";
+  clearImageAttachment();
   renderChat();renderHistoryList();
 }
 function deleteSession(id,e){
@@ -187,9 +218,9 @@ function renderChat(){
   const msgs=chatHistory.filter(m=>m.role!=="system");
   if(!msgs.length){
     box.innerHTML=`<div class="welcome-screen">
-      <div class="welcome-badge">📚</div>
-      <div class="welcome-title">Your Personal Study Coach</div>
-      <div class="welcome-sub">Ask me to explain any concept, quiz you on a topic, or walk you through problems step by step.</div>
+      <div class="welcome-badge"><img src="Icon.png" alt="Apex Mind" class="welcome-logo-img"></div>
+      <div class="welcome-title">Apex Mind AI</div>
+      <div class="welcome-sub">Ask me to explain any concept, quiz you on a topic, or walk you through problems step by step.<br><span style="color:var(--accent3);font-size:12px">📸 New: Attach a photo of any question or diagram!</span></div>
       <div class="welcome-chips">
         <div class="chip" onclick="fillInput('What is the difference between mitosis and meiosis?')">🔬 Biology</div>
         <div class="chip" onclick="fillInput('Explain Newton\\'s laws of motion with examples')">⚙️ Physics</div>
@@ -202,9 +233,134 @@ function renderChat(){
     return;
   }
   box.innerHTML="";
-  msgs.forEach(msg=>addMessage(msg.content,msg.role==="user"?"user":"bot",false));
+  msgs.forEach(msg=>{
+    if(msg.role==="user"){
+      // Check if this message had an image (stored as array content)
+      if(Array.isArray(msg.content)){
+        const imgPart=msg.content.find(p=>p.type==="image_url");
+        const textPart=msg.content.find(p=>p.type==="text");
+        addMessageWithImage(textPart?textPart.text:"",imgPart?imgPart.image_url.url:null,"user",false);
+      }else{
+        addMessage(msg.content,"user",false);
+      }
+    }else{
+      addMessage(msg.content,"bot",false);
+    }
+  });
   box.scrollTop=box.scrollHeight;
 }
+
+// ══════════════════════════════════════
+// PICTURE MODE — IMAGE ATTACH
+// ══════════════════════════════════════
+
+function handleImageAttach(file){
+  if(!file.type.startsWith("image/")){alert("Please attach an image file.");return;}
+  if(file.size>5*1024*1024){alert("Image must be under 5MB.");return;}
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const dataUrl=e.target.result;
+    const base64=dataUrl.split(",")[1];
+    const mime=file.type;
+    attachedImageBase64=base64;
+    attachedImageMime=mime;
+    attachedImageName=file.name;
+    showImagePreview(dataUrl,file.name);
+  };
+  reader.readAsDataURL(file);
+}
+
+function showImagePreview(dataUrl,name){
+  // Remove any existing preview
+  const existing=document.getElementById("imagePreviewBar");
+  if(existing)existing.remove();
+
+  const bar=document.createElement("div");
+  bar.id="imagePreviewBar";
+  bar.className="image-preview-bar";
+  bar.innerHTML=`
+    <div class="img-preview-thumb-wrap">
+      <img src="${dataUrl}" alt="Attached" class="img-preview-thumb" onclick="openImageFullPreview('${dataUrl}')">
+    </div>
+    <div class="img-preview-info">
+      <div class="img-preview-name">${escapeHtml(name)}</div>
+      <div class="img-preview-hint">Ask any question about this image</div>
+    </div>
+    <button class="img-preview-remove" onclick="clearImageAttachment()" title="Remove image">✕</button>
+  `;
+
+  const inputArea=document.querySelector(".input-area");
+  const inputRow=document.querySelector(".input-row");
+  inputArea.insertBefore(bar,inputRow);
+
+  // Update placeholder
+  document.getElementById("userInput").placeholder="Ask a question about this image…";
+  document.getElementById("userInput").focus();
+
+  // Highlight the attach button
+  const btn=document.getElementById("imgAttachBtn");
+  if(btn)btn.classList.add("has-image");
+}
+
+function clearImageAttachment(){
+  attachedImageBase64=null;
+  attachedImageMime=null;
+  attachedImageName=null;
+  const bar=document.getElementById("imagePreviewBar");
+  if(bar)bar.remove();
+  document.getElementById("userInput").placeholder="Ask anything — explain, quiz me, help me understand…";
+  const btn=document.getElementById("imgAttachBtn");
+  if(btn)btn.classList.remove("has-image");
+  // Close full preview if open
+  closeImageFullPreview();
+}
+
+function openImageFullPreview(src){
+  let overlay=document.getElementById("imgFullOverlay");
+  if(!overlay){
+    overlay=document.createElement("div");
+    overlay.id="imgFullOverlay";
+    overlay.className="img-full-overlay";
+    overlay.innerHTML=`<div class="img-full-inner"><button class="img-full-close" onclick="closeImageFullPreview()">✕</button><img id="imgFullImg" src="" alt="Preview"></div>`;
+    overlay.addEventListener("click",function(e){if(e.target===overlay)closeImageFullPreview();});
+    document.body.appendChild(overlay);
+  }
+  document.getElementById("imgFullImg").src=src;
+  overlay.classList.add("open");
+}
+
+function closeImageFullPreview(){
+  const overlay=document.getElementById("imgFullOverlay");
+  if(overlay)overlay.classList.remove("open");
+}
+
+function addMessageWithImage(text,imgSrc,role,animate=true){
+  const box=document.getElementById("chatBox");
+  const w=box.querySelector(".welcome-screen");if(w)w.remove();
+  const wrap=document.createElement("div");wrap.classList.add("message",role,"has-image-msg");
+  if(!animate)wrap.style.animation="none";
+
+  let html="";
+  if(imgSrc){
+    html+=`<div class="msg-image-wrap"><img src="${imgSrc}" class="msg-image" alt="Question image" onclick="openImageFullPreview('${imgSrc}')"><div class="msg-image-label">📸 Image attached</div></div>`;
+  }
+  if(text){
+    html+=`<div class="msg-text">${escapeHtml(text)}</div>`;
+  }
+
+  const td=document.createElement("div");td.innerHTML=html;
+  const meta=document.createElement("div");meta.classList.add("msg-meta");
+  const cb=document.createElement("button");cb.classList.add("copy-btn");cb.textContent="copy";cb.onclick=()=>copyText(text);
+  const te=document.createElement("div");te.classList.add("time");te.textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  meta.appendChild(cb);meta.appendChild(te);
+  wrap.appendChild(td);wrap.appendChild(meta);
+  box.appendChild(wrap);box.scrollTop=box.scrollHeight;
+  return wrap;
+}
+
+// ══════════════════════════════════════
+// CHAT & MESSAGE RENDERING
+// ══════════════════════════════════════
 
 function addMessage(text,role,animate=true){
   const box=document.getElementById("chatBox");
@@ -258,7 +414,8 @@ function formatApiError(err){
 // ── OpenRouter API ──
 async function callOpenRouter(payload,modelIndex,attempt){
   if(modelIndex===undefined)modelIndex=0;if(attempt===undefined)attempt=0;
-  var model=MODELS[Math.min(modelIndex,MODELS.length-1)];
+  var model=payload._model||MODELS[Math.min(modelIndex,MODELS.length-1)];
+  delete payload._model;
   var apiKey=requireApiKey();
   var res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
     method:"POST",
@@ -270,8 +427,8 @@ async function callOpenRouter(payload,modelIndex,attempt){
     var errMsg=(data&&data.error&&data.error.message)||(data&&data.message)||("API Error "+res.status);
     var retryable=[429,500,502,503,529];
     if(retryable.indexOf(res.status)!==-1){
-      if(attempt<2){await sleep(250*Math.pow(2,attempt));return callOpenRouter(payload,modelIndex,attempt+1);}
-      if(modelIndex<MODELS.length-1){return callOpenRouter(payload,modelIndex+1,0);}
+      if(attempt<2){await sleep(250*Math.pow(2,attempt));return callOpenRouter(Object.assign({},payload,{_model:model}),modelIndex,attempt+1);}
+      if(modelIndex<MODELS.length-1){return callOpenRouter(Object.assign({},payload,{_model:model}),modelIndex+1,0);}
     }
     throw new Error(errMsg);
   }
@@ -291,21 +448,87 @@ function fillInput(text){
 }
 function sendHint(text){fillInput(text);}
 
+// ── MAIN ASK WITH OPTIONAL IMAGE ──
 async function askAI(){
   if(isLoading)return;
-  const input=document.getElementById("userInput"),userMessage=input.value.trim();
-  if(!userMessage)return;
+  const input=document.getElementById("userInput");
+  let userMessage=input.value.trim();
+
+  // If image attached but no text, provide a default prompt
+  if(attachedImageBase64&&!userMessage){
+    userMessage="Please explain this image and help me understand it.";
+  }
+  if(!userMessage&&!attachedImageBase64)return;
+
   isLoading=true;document.getElementById("sendBtn").disabled=true;
-  addMessage(userMessage,"user");chatHistory.push({role:"user",content:userMessage});
-  input.value="";input.focus();
+
+  const hasImage=!!attachedImageBase64;
+  const imgBase64=attachedImageBase64;
+  const imgMime=attachedImageMime;
+  const imgDataUrl=hasImage?`data:${imgMime};base64,${imgBase64}`:null;
+
+  // Show user message in chat
+  if(hasImage){
+    addMessageWithImage(userMessage,imgDataUrl,"user",true);
+  }else{
+    addMessage(userMessage,"user");
+  }
+
+  // Build message content
+  let msgContent;
+  if(hasImage){
+    msgContent=[
+      {type:"text",text:userMessage||"Please explain this image."},
+      {type:"image_url",image_url:{url:`data:${imgMime};base64,${imgBase64}`}}
+    ];
+  }else{
+    msgContent=userMessage;
+  }
+
+  // Push to history (store data URL reference for re-render)
+  chatHistory.push({role:"user",content:msgContent});
+
+  // Update session label
   const s=getSessions().find(x=>x.id===activeSessionId);
   if(s&&(s.label==="New Session"||s.label==="New Chat")){
-    const label=userMessage.slice(0,42)+(userMessage.length>42?"...":"");
+    const label=(hasImage?"[Image] ":"")+userMessage.slice(0,42)+(userMessage.length>42?"...":"");
     updateLabel(activeSessionId,label);document.getElementById("chatLabel").textContent=label.toLowerCase();
   }
+
+  input.value="";
+  clearImageAttachment();
   updateProgress();showTyping();trackMsg();
+
   try{
-    const data=await callOpenRouter({messages:trimMessages(chatHistory,MAX_CHAT_MESSAGES),temperature:0.7});
+    // For image queries, use vision model
+    const modelOverride=hasImage?VISION_MODEL:undefined;
+
+    // Build trimmed messages - for vision model, strip old image messages to save context
+    let msgsToSend=trimMessages(chatHistory,MAX_CHAT_MESSAGES);
+
+    // Convert image_url content for API (pass through as-is for vision model)
+    const apiMessages=msgsToSend.map(m=>{
+      if(m.role==="system")return m;
+      if(Array.isArray(m.content)){
+        // Keep as multipart for vision model; strip images for text model
+        if(hasImage||modelOverride){
+          return{role:m.role,content:m.content};
+        }else{
+          // Flatten to text only
+          const textOnly=m.content.filter(p=>p.type==="text").map(p=>p.text).join(" ");
+          return{role:m.role,content:textOnly};
+        }
+      }
+      return m;
+    });
+
+    const payload={
+      messages:apiMessages,
+      temperature:0.7,
+      _model:modelOverride
+    };
+
+    const data=await callOpenRouter(payload);
     removeTyping();
     const aiText=(data&&data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"Unexpected response.";
     typeEffect(aiText);chatHistory.push({role:"assistant",content:aiText});
@@ -316,7 +539,18 @@ async function askAI(){
 
 function exportChat(){
   let text="APEX STUDY AI - SESSION EXPORT\n"+"=".repeat(40)+"\n\n";
-  chatHistory.forEach(msg=>{if(msg.role!=="system")text+=(msg.role==="user"?"YOU":"APEX STUDY AI")+":\n"+msg.content+"\n\n"+"-".repeat(30)+"\n\n";});
+  chatHistory.forEach(msg=>{
+    if(msg.role!=="system"){
+      const roleLabel=msg.role==="user"?"YOU":"APEX STUDY AI";
+      let content=msg.content;
+      if(Array.isArray(content)){
+        const textPart=content.find(p=>p.type==="text");
+        const hasImg=content.find(p=>p.type==="image_url");
+        content=(hasImg?"[Image attached] ":"")+(textPart?textPart.text:"");
+      }
+      text+=roleLabel+":\n"+content+"\n\n"+"-".repeat(30)+"\n\n";
+    }
+  });
   const blob=new Blob([text],{type:"text/plain"}),a=document.createElement("a");
   a.href=URL.createObjectURL(blob);a.download="apex-study-session.txt";a.click();
 }
@@ -325,7 +559,6 @@ function exportChat(){
 //  NOTES GENERATOR
 // ══════════════════════════════════════
 function setCustomLang(){
-  // Toggle "Other…" selected state and show/hide the custom input
   document.querySelectorAll('[id^="nlang-"]').forEach(e=>e.classList.remove("on"));
   document.getElementById("nlang-Other").classList.add("on");
   const wrap=document.getElementById("customLangWrap");
@@ -336,24 +569,18 @@ function setCustomLang(){
 function startNotes(){
   const topic=document.getElementById("notesTopic").value.trim();
   if(!topic){document.getElementById("notesTopic").focus();return;}
-
-  // Determine language
   let lang=pillState.nlang;
   if(lang==="Other"||!lang){
     const custom=(document.getElementById("customLangInput").value||"").trim();
     lang=custom||"English";
   }
-
   const length=pillState.nlen==="long"?"long and detailed":"short and concise";
   const prompt=`Please generate ${length} study notes on the topic: "${topic}". Write the notes in ${lang}. Use clear headings, bullet points, key terms highlighted, and end with a quick summary box. Make the notes easy to revise from.`;
-
   closeModal("notesModal");
   document.getElementById("notesTopic").value="";
   document.getElementById("customLangInput").value="";
   document.getElementById("customLangWrap").style.display="none";
-  // Reset lang pill to English
   setPill("nlang","English");
-
   document.getElementById("userInput").value=prompt;
   trackNotes();
   askAI();
