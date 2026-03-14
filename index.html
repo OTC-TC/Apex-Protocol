@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Apex Mind AI</title>
+<link rel="icon" type="image/png" href="Icon.png">
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,700;1,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -18,7 +19,10 @@
 <!-- ═══ SIDEBAR ═══ -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
-    <span class="sidebar-title">Study Sessions</span>
+    <div class="sidebar-brand">
+      <img src="Icon.png" alt="Apex Mind" class="sidebar-logo-img">
+      <span class="sidebar-title">Apex Mind AI</span>
+    </div>
     <button class="sidebar-close" onclick="closeSidebar()">✕</button>
   </div>
   <button class="new-chat-btn" onclick="newChat()">＋ New Session</button>
@@ -229,8 +233,8 @@
       <button class="history-toggle" onclick="toggleSidebar()" title="Sessions">☰</button>
       <div class="header-center">
         <div class="header-brand">
-          <div class="brand-icon">📚</div>
-          <div class="header-title">Apex Study AI</div>
+          <div class="brand-icon"><img src="Icon.png" alt="Apex Mind" class="brand-logo-img"></div>
+          <div class="header-title">Apex Mind AI</div>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
         <div class="header-subtitle" id="chatLabel">new session</div>
@@ -244,9 +248,20 @@
         <button class="hdr-btn danger"      onclick="clearCurrentChat()"      data-tip="Clear">✕</button>
       </div>
     </header>
+
     <div class="chat-box" id="chatBox"></div>
+
     <div class="input-area">
+      <!-- Image preview bar is injected here dynamically by JS -->
       <div class="input-row">
+        <!-- Image attach button -->
+        <button class="img-attach-btn" id="imgAttachBtn"
+          onclick="document.getElementById('imageFileInput').click()"
+          title="Attach image / photo of a question">
+          📸
+        </button>
+        <input type="file" id="imageFileInput" accept="image/*" style="display:none">
+
         <input type="text" id="userInput" placeholder="Ask anything — explain, quiz me, help me understand…" autocomplete="off"/>
         <button class="send-btn" id="sendBtn" onclick="askAI()">Send</button>
       </div>
@@ -256,6 +271,7 @@
         <span class="hint-chip" onclick="fillInput('Help me solve: 2x + 5 = 13 step by step')">🔢 Solve</span>
         <span class="hint-chip" onclick="fillInput('Real-world example of Newtons 3rd law')">💡 Example</span>
         <span class="hint-chip" onclick="fillInput('Summarize the causes of World War I')">📜 Summarize</span>
+        <span class="hint-chip" onclick="document.getElementById('imageFileInput').click()">📸 Ask about image</span>
       </div>
     </div>
   </div>
