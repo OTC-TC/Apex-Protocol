@@ -13,7 +13,6 @@
 <body>
 
 <div id="copy-toast">COPIED ✓</div>
-
 <div id="overlay" onclick="closeSidebar()"></div>
 
 <!-- ═══ SIDEBAR ═══ -->
@@ -41,29 +40,29 @@
       <input id="notesTopic" class="field-input" type="text" placeholder="e.g. Photosynthesis, French Revolution, Algebra…"/>
       <div class="field-label">Note length</div>
       <div class="pill-row">
-        <div class="pill notes on" id="nlen-short"  onclick="setPill('nlen','short')">Short &amp; Concise</div>
-        <div class="pill notes"    id="nlen-long"   onclick="setPill('nlen','long')">Long &amp; Detailed</div>
+        <div class="pill notes on" id="nlen-short" onclick="setPill('nlen','short')">Short &amp; Concise</div>
+        <div class="pill notes" id="nlen-long" onclick="setPill('nlen','long')">Long &amp; Detailed</div>
       </div>
       <div class="field-label">Language</div>
       <div class="pill-row" id="notesLangRow">
-        <div class="pill notes on" id="nlang-English"  onclick="setPill('nlang','English')">English</div>
-        <div class="pill notes"    id="nlang-Hindi"    onclick="setPill('nlang','Hindi')">Hindi</div>
-        <div class="pill notes"    id="nlang-Spanish"  onclick="setPill('nlang','Spanish')">Spanish</div>
-        <div class="pill notes"    id="nlang-French"   onclick="setPill('nlang','French')">French</div>
-        <div class="pill notes"    id="nlang-German"   onclick="setPill('nlang','German')">German</div>
-        <div class="pill notes"    id="nlang-Arabic"   onclick="setPill('nlang','Arabic')">Arabic</div>
-        <div class="pill notes"    id="nlang-Bengali"  onclick="setPill('nlang','Bengali')">Bengali</div>
-        <div class="pill notes"    id="nlang-Other"    onclick="setCustomLang()">Other…</div>
+        <div class="pill notes on" id="nlang-English" onclick="setPill('nlang','English')">English</div>
+        <div class="pill notes" id="nlang-Hindi" onclick="setPill('nlang','Hindi')">Hindi</div>
+        <div class="pill notes" id="nlang-Spanish" onclick="setPill('nlang','Spanish')">Spanish</div>
+        <div class="pill notes" id="nlang-French" onclick="setPill('nlang','French')">French</div>
+        <div class="pill notes" id="nlang-German" onclick="setPill('nlang','German')">German</div>
+        <div class="pill notes" id="nlang-Arabic" onclick="setPill('nlang','Arabic')">Arabic</div>
+        <div class="pill notes" id="nlang-Bengali" onclick="setPill('nlang','Bengali')">Bengali</div>
+        <div class="pill notes" id="nlang-Other" onclick="setCustomLang()">Other…</div>
       </div>
       <div id="customLangWrap" style="display:none">
-        <input id="customLangInput" class="field-input" type="text" placeholder="Type your language (e.g. Japanese, Swahili…)" style="margin-top:4px"/>
+        <input id="customLangInput" class="field-input" type="text" placeholder="Type your language…" style="margin-top:4px"/>
       </div>
       <button class="modal-primary-btn btn-notes" onclick="startNotes()">Generate Notes 📒</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ MOCK TEST SETUP MODAL ═══ -->
+<!-- ═══ MOCK TEST MODAL ═══ -->
 <div class="modal-bg" id="mockModal">
   <div class="modal-box">
     <div class="modal-head">
@@ -75,36 +74,36 @@
       <input id="mockTopic" class="field-input" type="text" placeholder="e.g. Human Biology, Indian History, Calculus…"/>
       <div class="field-label">Number of questions</div>
       <div class="pill-row">
-        <div class="pill gold on" id="mnum-5"  onclick="setPill('mnum',5)">5</div>
-        <div class="pill gold"    id="mnum-10" onclick="setPill('mnum',10)">10</div>
-        <div class="pill gold"    id="mnum-15" onclick="setPill('mnum',15)">15</div>
-        <div class="pill gold"    id="mnum-20" onclick="setPill('mnum',20)">20</div>
+        <div class="pill gold on" id="mnum-5" onclick="setPill('mnum',5)">5</div>
+        <div class="pill gold" id="mnum-10" onclick="setPill('mnum',10)">10</div>
+        <div class="pill gold" id="mnum-15" onclick="setPill('mnum',15)">15</div>
+        <div class="pill gold" id="mnum-20" onclick="setPill('mnum',20)">20</div>
       </div>
       <div class="field-label">Question type</div>
       <div class="pill-row">
-        <div class="pill gold on" id="mtype-mcq"   onclick="setPill('mtype','mcq')">MCQ Only</div>
-        <div class="pill gold"    id="mtype-mixed" onclick="setPill('mtype','mixed')">MCQ + Short Answer</div>
+        <div class="pill gold on" id="mtype-mcq" onclick="setPill('mtype','mcq')">MCQ Only</div>
+        <div class="pill gold" id="mtype-mixed" onclick="setPill('mtype','mixed')">MCQ + Short Answer</div>
       </div>
       <div class="field-label">Time limit</div>
       <div class="pill-row">
-        <div class="pill gold"    id="mtime-5"  onclick="setPill('mtime',5)">5 min</div>
+        <div class="pill gold" id="mtime-5" onclick="setPill('mtime',5)">5 min</div>
         <div class="pill gold on" id="mtime-10" onclick="setPill('mtime',10)">10 min</div>
-        <div class="pill gold"    id="mtime-15" onclick="setPill('mtime',15)">15 min</div>
-        <div class="pill gold"    id="mtime-20" onclick="setPill('mtime',20)">20 min</div>
-        <div class="pill gold"    id="mtime-30" onclick="setPill('mtime',30)">30 min</div>
+        <div class="pill gold" id="mtime-15" onclick="setPill('mtime',15)">15 min</div>
+        <div class="pill gold" id="mtime-20" onclick="setPill('mtime',20)">20 min</div>
+        <div class="pill gold" id="mtime-30" onclick="setPill('mtime',30)">30 min</div>
       </div>
       <div class="field-label">Difficulty</div>
       <div class="pill-row">
-        <div class="pill gold"    id="mdiff-easy"   onclick="setPill('mdiff','easy')">Easy</div>
+        <div class="pill gold" id="mdiff-easy" onclick="setPill('mdiff','easy')">Easy</div>
         <div class="pill gold on" id="mdiff-medium" onclick="setPill('mdiff','medium')">Medium</div>
-        <div class="pill gold"    id="mdiff-hard"   onclick="setPill('mdiff','hard')">Hard</div>
+        <div class="pill gold" id="mdiff-hard" onclick="setPill('mdiff','hard')">Hard</div>
       </div>
       <button class="modal-primary-btn btn-gold" onclick="startMockTest()">Start Mock Test ⏱️</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ FLASHCARD BLITZ MODAL ═══ -->
+<!-- ═══ FLASHCARD MODAL ═══ -->
 <div class="modal-bg" id="flashModal">
   <div class="modal-box">
     <div class="modal-head">
@@ -113,32 +112,54 @@
     </div>
     <div class="modal-body">
       <div class="field-label">Topic</div>
-      <input id="flashTopic" class="field-input" type="text" placeholder="e.g. Periodic Table, French Revolution, Calculus…"/>
+      <input id="flashTopic" class="field-input" type="text" placeholder="e.g. Periodic Table, French Revolution…"/>
       <div class="field-label">Number of cards</div>
       <div class="pill-row">
-        <div class="pill flash on" id="fnum-5"  onclick="setPill('fnum',5)">5</div>
-        <div class="pill flash"    id="fnum-8"  onclick="setPill('fnum',8)">8</div>
-        <div class="pill flash"    id="fnum-12" onclick="setPill('fnum',12)">12</div>
-        <div class="pill flash"    id="fnum-15" onclick="setPill('fnum',15)">15</div>
+        <div class="pill flash on" id="fnum-5" onclick="setPill('fnum',5)">5</div>
+        <div class="pill flash" id="fnum-8" onclick="setPill('fnum',8)">8</div>
+        <div class="pill flash" id="fnum-12" onclick="setPill('fnum',12)">12</div>
+        <div class="pill flash" id="fnum-15" onclick="setPill('fnum',15)">15</div>
       </div>
       <div class="field-label">Mode</div>
       <div class="pill-row">
-        <div class="pill flash on" id="fmode-classic"  onclick="setPill('fmode','classic')">Classic Flip</div>
-        <div class="pill flash"    id="fmode-speed"    onclick="setPill('fmode','speed')">Speed Round ⚡</div>
-        <div class="pill flash"    id="fmode-survival" onclick="setPill('fmode','survival')">Survival 💀</div>
+        <div class="pill flash on" id="fmode-classic" onclick="setPill('fmode','classic')">Classic Flip</div>
+        <div class="pill flash" id="fmode-speed" onclick="setPill('fmode','speed')">Speed Round ⚡</div>
+        <div class="pill flash" id="fmode-survival" onclick="setPill('fmode','survival')">Survival 💀</div>
       </div>
       <div class="field-label">Difficulty</div>
       <div class="pill-row">
-        <div class="pill flash"    id="fdiff-easy"   onclick="setPill('fdiff','easy')">Easy</div>
+        <div class="pill flash" id="fdiff-easy" onclick="setPill('fdiff','easy')">Easy</div>
         <div class="pill flash on" id="fdiff-medium" onclick="setPill('fdiff','medium')">Medium</div>
-        <div class="pill flash"    id="fdiff-hard"   onclick="setPill('fdiff','hard')">Hard</div>
+        <div class="pill flash" id="fdiff-hard" onclick="setPill('fdiff','hard')">Hard</div>
       </div>
       <button class="modal-primary-btn btn-flash" onclick="startFlashBlitz()">Launch Flashcard Blitz ⚡</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ STUDY TRACKER MODAL ═══ -->
+<!-- ═══ PLANNER MODAL ═══ -->
+<div class="modal-bg" id="plannerModal">
+  <div class="modal-box planner-modal-box">
+    <div class="modal-head">
+      <div class="modal-head-title">🗓️ AI Study Planner</div>
+      <button class="modal-x" onclick="closeModal('plannerModal')">✕</button>
+    </div>
+    <div id="plannerModalBody" class="planner-modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══ WEAKNESS DETECTION MODAL ═══ -->
+<div class="modal-bg" id="weaknessModal">
+  <div class="modal-box weakness-modal-box">
+    <div class="modal-head">
+      <div class="modal-head-title">🎯 Your Weak Areas</div>
+      <button class="modal-x" onclick="closeModal('weaknessModal')">✕</button>
+    </div>
+    <div id="weaknessModalBody" class="weakness-modal-body"></div>
+  </div>
+</div>
+
+
 <div class="modal-bg" id="trackerModal">
   <div class="modal-box tracker-modal-box">
     <div class="modal-head">
@@ -160,7 +181,7 @@
   </div>
 </div>
 
-<!-- ═══ MOCK TEST TAKING SCREEN ═══ -->
+<!-- ═══ MOCK TEST SCREEN ═══ -->
 <div class="mock-screen" id="mockScreen">
   <div class="mock-header">
     <div class="mock-title" id="mockTestTitle">Mock Test</div>
@@ -181,7 +202,7 @@
   <div class="results-body" id="resultsBody"></div>
 </div>
 
-<!-- ═══ FLASHCARD BLITZ SCREEN ═══ -->
+<!-- ═══ FLASHCARD SCREEN ═══ -->
 <div class="flash-screen" id="flashScreen">
   <div class="flash-header">
     <div class="flash-title" id="flashScreenTitle">⚡ Flashcard Blitz</div>
@@ -240,40 +261,45 @@
         <div class="header-subtitle" id="chatLabel">new session</div>
       </div>
       <div class="header-actions">
-        <button class="hdr-btn tracker-btn" onclick="openTracker()"           data-tip="Tracker">📊</button>
-        <button class="hdr-btn flash-btn"   onclick="openModal('flashModal')" data-tip="Flashcards">⚡</button>
-        <button class="hdr-btn mock-btn"    onclick="openModal('mockModal')"  data-tip="Mock Test">⏱️</button>
-        <button class="hdr-btn notes-btn"   onclick="openModal('notesModal')" data-tip="Notes">📒</button>
-        <button class="hdr-btn"             onclick="exportChat()"            data-tip="Export">↓</button>
-        <button class="hdr-btn danger"      onclick="clearCurrentChat()"      data-tip="Clear">✕</button>
+        <button class="hdr-btn weakness-btn" onclick="openWeaknessModal()" data-tip="Weak Areas" id="weaknessBtnHdr">🎯</button>
+        <button class="hdr-btn planner-btn" onclick="showPlannerHome()" data-tip="Planner">🗓️</button>
+        <button class="hdr-btn tracker-btn" onclick="openTracker()" data-tip="Tracker">📊</button>
+        <button class="hdr-btn flash-btn" onclick="openModal('flashModal')" data-tip="Flashcards">⚡</button>
+        <button class="hdr-btn mock-btn" onclick="openModal('mockModal')" data-tip="Mock Test">⏱️</button>
+        <button class="hdr-btn notes-btn" onclick="openModal('notesModal')" data-tip="Notes">📒</button>
+        <button class="hdr-btn" onclick="exportChat()" data-tip="Export">↓</button>
+        <button class="hdr-btn danger" onclick="clearCurrentChat()" data-tip="Clear">✕</button>
       </div>
     </header>
 
     <div class="chat-box" id="chatBox"></div>
 
     <div class="input-area">
-      <!-- Image preview bar is injected here dynamically by JS -->
       <div class="input-row">
-        <!-- Image attach button -->
         <button class="img-attach-btn" id="imgAttachBtn"
           onclick="document.getElementById('imageFileInput').click()"
-          title="Attach image / photo of a question">
-          📸
-        </button>
+          title="Attach image / photo of a question">📸</button>
         <input type="file" id="imageFileInput" accept="image/*" style="display:none">
-
         <input type="text" id="userInput" placeholder="Ask anything — explain, quiz me, help me understand…" autocomplete="off"/>
         <button class="send-btn" id="sendBtn" onclick="askAI()">Send</button>
       </div>
       <div class="input-hints">
-        <span class="hint-chip" onclick="fillInput('Explain miosis simply')">🌱 Explain</span>
-        <span class="hint-chip" onclick="fillInput('Quiz me on World War II')">📝 Quiz me</span>
-        <span class="hint-chip" onclick="fillInput('Help me solve: 2x + 5 = 13 step by step')">🔢 Solve</span>
-        <span class="hint-chip" onclick="fillInput('Real-world example of Newtons 3rd law')">💡 Example</span>
-        <span class="hint-chip" onclick="fillInput('Summarize the causes of World War I')">📜 Summarize</span>
+        <span class="hint-chip" onclick="fillInput('Explain this simply')">🌱 Explain</span>
+        <span class="hint-chip" onclick="fillInput('Quiz me on this topic')">📝 Quiz me</span>
+        <span class="hint-chip" onclick="fillInput('Help me solve this step by step')">🔢 Solve</span>
+        <span class="hint-chip" onclick="fillInput('Give me a real-world example')">💡 Example</span>
+        <span class="hint-chip" onclick="fillInput('Summarize the key points')">📜 Summarize</span>
         <span class="hint-chip" onclick="document.getElementById('imageFileInput').click()">📸 Ask about image</span>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Full image overlay -->
+<div class="img-full-overlay" id="imgFullOverlay" onclick="closeImageFullPreview()">
+  <div class="img-full-inner" onclick="event.stopPropagation()">
+    <button class="img-full-close" onclick="closeImageFullPreview()">✕</button>
+    <img id="imgFullImg" src="" alt="Preview">
   </div>
 </div>
 
