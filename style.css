@@ -114,7 +114,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font
 .plan-output{background:var(--surface);border:1px solid var(--border2);border-radius:20px;overflow:hidden;animation:planIn .4s ease}
 @keyframes planIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .plan-output-head{padding:15px 20px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.poh-left{}
+
 .poh-title{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--ink)}
 .poh-meta{font-size:10px;color:var(--ink-muted);font-family:'DM Mono',monospace;margin-top:2px}
 .poh-badge{display:flex;align-items:center;gap:5px;padding:5px 11px;background:var(--accent-dim);border:1px solid rgba(52,201,138,0.25);border-radius:20px;font-size:10px;font-family:'DM Mono',monospace;color:var(--accent);flex-shrink:0}
